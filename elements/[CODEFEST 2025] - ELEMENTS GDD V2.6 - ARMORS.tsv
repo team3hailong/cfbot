@@ -1,0 +1,6 @@
+ARMORS							
+STT	Name	ID	Type	Độ hiếm (%)	HP	Damage Reduction (%)	Effect
+1	Mũ gỗ	WOODEN_HELMET	Helmet	40	20	5%	
+2	Giáp gai	ARMOR	Armor	30	50	20%	
+3	Mũ phù thủy	MAGIC_HELMET	Helmet	20	50	20%	
+4	Giáp phù thủy	MAGIC_ARMOR	Armor	10	75	30%	

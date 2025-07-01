@@ -1,0 +1,10 @@
+NPCS												
+STT	Name	ID	Type	Size (cell)	Speed (cell/s)	Attack Range (cell)	Damage	HP hồi	Tác động đến Hero	Cooldown (s)	Tối thiểu / Tối đa	Mô tả
+1	Thổ dân	NATIVE	Kẻ Thù	1*1	2	3*3	10	-	Gây sát thương khi chạm	3		
+2	Hồn ma của nhà thám hiểm trước	GHOST	Kẻ Thù	1*1	2	3*3	10	-	Gây sát thương khi chạm	3		
+3	Báo đốm	LEOPARD	Kẻ Thù	1*1	2	3*3	5/s	-	Gây Bleed 3s khi chạm	3		Bleed trừ máu theo 1 lượng cố định mỗi giây
+4	Anaconda	ANACONDA	Kẻ Thù	1*1	2	3*3	5/s	-	Gây Poison 5s khi chạm	3		Poison trừ máu theo 1 lượng cố định mỗi giây
+5	Tê giác	RHINO	Kẻ Thù	1*1	2	3*3	15	-	Gây sát thương khi chạm	3		
+6	Tinh linh	SPIRIT	Đồng Minh	1*1	2	3*3	-	50	Hồi HP khi chạm	10	3 / ...	
+7	Người đá	GOLEM	Kẻ Thù	1*1	2	3*3	15	-	- Stun 1s, gây sát thương khi chạm	3		
+8	Rồng JS		Làm màu	9*9								- Chỉ bay khi trứng rồng xuất hiện trong thời gian đã config. - Lưng rồng có logo JSClub

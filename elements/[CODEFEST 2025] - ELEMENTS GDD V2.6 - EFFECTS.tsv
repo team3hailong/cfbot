@@ -1,0 +1,13 @@
+EFFECTS										
+STT	Name 	ID	Thời gian duy trì (s)	Damage	NPC	Weapon	Obstacle	Equipment	Mô tả	Note
+1	Stun	STUN	Tuỳ đồ	-	Người đá	Hạt Chuỳ gai Dây thừng Gậy đánh bóng 	Vỏ chuối	La bàn	Làm choáng kẻ địch, khiến chúng không thể làm bất kỳ hành động nào trong một khoảng thời gian. (vẫn bị dính effect Knock Back, Kéo)	
+2	Tàng hình	INVISIBLE	Tuỳ đồ	-	-	Bom khói	Bụi cây	Gậy thần	Hero khác không thể nhìn thấy bản thân trong 1 thời gian. Vẫn nhận sát thương nếu bị đánh trúng. Gây sát thương sẽ ngay lập tức hiện nguyên hình	
+3	Poison	POISON	Tuỳ đồ	5/s	Anaconda	-	-	-	Đốt máu theo một lượng cố định mỗi giây.	
+4	Bleed	BLEED	3s	5/s	Báo đốm	-	-	-	Đốt máu theo một lượng cố định mỗi giây và giảm 50% khả năng hồi HP.	
+5	Kéo	PULL	0s	-	-	Dây thừng	-	-	Ngay lập tức bị thay đổi vị trí. Có 2 loại kéo: - Kéo Hero về phía bản thân: Hero bị kéo trúng sẽ ngay lập tức ở trước mặt bản thân 1 cell  - Kéo bản thân về phía obstacles có tag  hoặc DESTRUCTIBLE hoặc NPCs: Bản thân sẽ ngay lập tức ở vị trí trước mặt hướng kéo, sao cho cách đồ vật/NPC 1 cell	
+6	Mù	BLIND	Tuỳ vị trí Hero đứng	-	-	Bom khói	-	-	Không nhìn thấy bất kỳ thứ gì khi ở trong vùng bị mù	
+7	Knock Back	KNOCK_BACK	0s	-	-	Gậy đánh bóng	Cửa đá	-	Làm kẻ địch bị đẩy lùi 3 cell khi trúng đòn. Nếu va phải DESTRUCTIBLE, , CAN SHOOT THROUGH sẽ bị stun 2s	
+8	Reverse 	REVERSE	10s	-	-	Chuông	-	-	Đảo ngược di chuyển của Hero. Ví dụ muốn rẽ phải thì rẽ trái, muốn đi lùi thì đi thẳng, ....	
+9	Hồi sinh 	REVIVAL	đến khi chết	-	-	-	-	Tiên dược sự sống	Được hồi sinh ngay lập tức trong vùng an toàn. Không mất trang bị, không bị trừ điểm. Hồi 100 HP và bất tử trong 2s.	
+10	Bất tử	UNDEAD	2s	-	-	-	-	Tiên dược sự sống	- Không chịu bất kì lượng sát thương nào, vẫn dính effect - Hiệu ứng người xem là Hero có aura màu vàng	
+11	Miễn khống chế	CONTROL_IMUNITY	7s	-	-	-	-	Thần dược	- Ngay lập tức hoá giải khống chế và miễn nhiễm hiệu ứng khống chế trong thời gian nhất định - Hiệu ứng người xem là Hero có aura màu trắng	

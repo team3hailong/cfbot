@@ -1,0 +1,39 @@
+OBSTACLES											
+STT	Name	ID	Size (cell)	Type	Tags	HP	Damage	Effect	Duration (s)	Tái kích hoạt	Note
+1	Rương	CHEST	1*1	Chest	Destructible, Pullable rope, Hero hit by bat will be stunned	20	-	- 	-	-	
+2	Trứng rồng	DRAGON_EGG	1*1	Chest	Destructible, Pullable rope, Hero hit by bat will be stunned	50	-	-	-	-	- Tương tự cái rương nhưng mà đồ ngon hơn, cụ thể là chuỳ và la bàn (cơ chế giống thả thính) - Không thông báo vị trí thính sẽ xuất hiện - Rồng bay qua thì thính sẽ xuất hiện - Nếu đứng ở ô ngay thời điểm thính rơi xuống thì sẽ chết
+3	Bẫy thợ săn	HUNT_TRAP	1*1	Trap	Trap, Can go through, Can shoot through	-	-	Choáng	3	 Sau 10s kể từ lúc Hero bị stun	
+4	Vỏ chuối	BANANA_PEEL	1*1	Trap	Trap, Can go through, Can shoot through	-	10	Choáng	1	-	- Đây là trap do quả chuối khi bị nổ để lại, khi hero đi vào ô có vỏ chuối thì bị ngã ( có thể cho hero nằm ngang cho giống bị ngã) và choáng trong 1 giây. Sau khi bị dẫm vỏ chuối biến mất. Không cộng điểm cho người ban đầu ném quả chuối
+5	Cục đá nhỏ	INDESTRUCTIBLE	1*1	Indestructible	Pullable rope, Hero hit by bat will be stunned	-	-	-	-	-	
+6	Cục đá lớn	INDESTRUCTIBLE	4*4	Indestructible	Pullable rope, Hero hit by bat will be stunned	-	-	-	-	-	
+7	Hồ nước	POND	10*10	Indestructible	Can go through, Can shoot through	-	-		-	-	
+8	Cây	INDESTRUCTIBLE	2*2	Indestructible	Pullable rope, Hero hit by bat will be stunned	-	-	-	-	-	
+9	Giếng	INDESTRUCTIBLE	2*2	Indestructible	Pullable rope, Hero hit by bat will be stunned	-	-	-	-	-	
+10	Gốc cây đổ	INDESTRUCTIBLE	1*4	Indestructible	Pullable rope, Hero hit by bat will be stunned	-	-	-	-	-	
+11	Xác chết xương	INDESTRUCTIBLE	3*5	Indestructible	Hero hit by bat will be stunned, Pullable rope	-	-	-	-	-	
+12	Hoa hồng đen	INDESTRUCTIBLE	1*1	Indestructible	Hero hit by bat will be stunned, Pullable rope	-	-	-	-	-	
+13	Hoa hồng dại	INDESTRUCTIBLE	1*1	Indestructible	Pullable rope, Hero hit by bat will be stunned	-	-	-	-	-	
+14	Bụi cây	BUSH	1*1	Indestructible	Can go through, Can shoot through	-	-	Tàng hình	-	-	Đi vào trong đó gây tàng hình (gây mất hoàn toàn vị trí), đạn bắn vào thì vẫn sẽ mất máu như bình thường và bị lộ vị trí.
+15	Hoa hồng đen đột biến	INDESTRUCTIBLE	4*2	Indestructible	Hero hit by bat will be stunned, Pullable rope	-	-	-	-	-	
+16	Hoa hồng dại đột biến	INDESTRUCTIBLE	4*2	Indestructible	Hero hit by bat will be stunned, Pullable rope	-	-	-	-	-	
+17	Tượng	INDESTRUCTIBLE	7*3	Indestructible	Pullable rope, Hero hit by bat will be stunned	-	-	-	-	-	
+18	Đuốc	INDESTRUCTIBLE	1*1	Indestructible	Pullable rope, Hero hit by bat will be stunned	-	-	-	-	-	Sáng 1 vùng, Hero đi vào thì màn hình sẽ sáng hơn (trang trí)
+19	Relics	INDESTRUCTIBLE	5*5	Indestructible	Pullable rope, Hero hit by bat will be stunned	-	-	-	-	-	
+20	Sông	RIVER		Indestructible	Can shoot through, Hero hit by bat will be stunned	-	-	-	-	-	Không thể đi qua được nhưng có thể bắn qua được
+21	Hồ lava	INDESTRUCTIBLE	5*5	Indestructible	Pullable rope, Hero hit by bat will be stunned	-	-	-	-	-	
+22	Cờ JS	INDESTRUCTIBLE	3*2	Indestructible	Hero hit by bat will be stunned, Pullable rope	-	-	-	-	-	
+23	Cổng phong ấn	INDESTRUCTIBLE	5*3	Indestructible	Pullable rope, Hero hit by bat will be stunned	-	-	-	-	-	
+24	Đồng hồ cổ đại	INDESTRUCTIBLE	2*5	Indestructible	Pullable rope, Hero hit by bat will be stunned	-	-	-	-	-	
+25	Đại bác bỏ hoang	INDESTRUCTIBLE	1*2	Indestructible	Pullable rope, Hero hit by bat will be stunned	-	-	-	-	-	
+26	Obsidian	INDESTRUCTIBLE	2*5	Indestructible	Pullable rope, Hero hit by bat will be stunned	-	-	-	-	-	
+27	Đầm lầy	INDESTRUCTIBLE	4*4	Indestructible	Hero hit by bat will be stunned, Pullable rope	-	-	-	-	-	
+28	Bệ gác kiếm	INDESTRUCTIBLE	1*2	Indestructible	Pullable rope, Hero hit by bat will be stunned	-	-	-	-	-	
+29	Quặng than	INDESTRUCTIBLE	2*4	Indestructible	Pullable rope, Hero hit by bat will be stunned	-	-	-	-	-	
+30	Hoa soi sáng	INDESTRUCTIBLE	1*1	Indestructible	Hero hit by bat will be stunned, Pullable rope	-	-	-	-	-	
+31	Rương bỏ hoang	INDESTRUCTIBLE	1*1	Indestructible	Pullable rope, Hero hit by bat will be stunned	-	-	-	-	-	
+32	Mạng nhện	INDESTRUCTIBLE	1*1	Indestructible	Hero hit by bat will be stunned, Pullable rope	-	-	-	-	-	
+33	Nấm	INDESTRUCTIBLE	1*1	Indestructible	Hero hit by bat will be stunned, Pullable rope	-	-	-	-	-	
+34	Hoa đột biến	INDESTRUCTIBLE	3*1	Indestructible	Hero hit by bat will be stunned, Pullable rope	-	-	-	-	-	
+35	Đá phát quang	INDESTRUCTIBLE	3*3	Indestructible	Pullable rope, Hero hit by bat will be stunned	-	-	-	-	-	
+36	Cây nấm khổng lồ	INDESTRUCTIBLE	3*3	Indestructible	Pullable rope, Hero hit by bat will be stunned						
+37	Cây phát quang khổng lồ	INDESTRUCTIBLE	3*3	Indestructible	Pullable rope, Hero hit by bat will be stunned	-	-	-	-	-	

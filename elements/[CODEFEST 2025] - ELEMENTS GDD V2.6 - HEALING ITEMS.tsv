@@ -1,0 +1,11 @@
+HEALING/ SUPPORTING ITEMS										
+STT	Name 	ID	Type	Độ hiếm (%)	Usage time (s)	HP hồi	Effect	Duration (s)	Điểm	Mô tả
+1	Lá thần mộc	GOD_LEAF	Healing	25	0.5	10	-	-	5	
+2	Nước mắt tinh linh	SPIRIT_TEAR	Healing	20	0.5	15	-	-	15	
+3	Vảy đuôi tiên cá	MERMAID_TAIL	Healing	15	1	20	-	-	20	
+4	Lông vũ phượng hoàng lửa	PHOENIX_FEATHERS	Healing	10	1.5	40	-	-	25	
+5	Máu kỳ lân	UNICORN_BLOOD	Healing	8	3	80	-	-	30	
+6	Thần dược	ELIXIR	Healing	6	0	5	- Miễn khống chế	7	30	- Khi bị khống chế có thể sử dụng - Hiệu ứng người xem là Hero có aura trắng
+7	Gậy thần	MAGIC	Healing	6	0	0	- Tàng hình	5	30	 - Sau khi sử dụng sẽ tàng hình trong 5s,  gây sát thương sẽ ngay lập tức bị hiện nguyên hình. (Người xem có thể nhìn thấy bot tàng hình) 
+8	Tiên dược sự sống	ELIXIR_OF_LIFE	Healing	có trong thính	-	100	- Hồi sinh - Bất tử trong 2s	cho tới khi chết	30	- Khi sử dụng bình thuốc này sẽ được effect Hồi Sinh. Effect này khi Hero chết sẽ ngay lập tức được hồi sinh và không bị trừ điểm hay mất trang bị khi chết. Sau đó bất tử trong 2s. Hồi sinh random trên bản đồ, không ở trong building và ở trong vùng an toàn. - Hiệu ứng người xem khi Hero bất tử là Hero có aura màu Vàng
+9	La bàn	COMPASS	Healing	có trong thính	2	-	- Làm choáng Hero phạm vi 9*9	7	60	Làm choáng toàn bộ hero trong phạm vi 9*9 trừ bản thân trong 7s
