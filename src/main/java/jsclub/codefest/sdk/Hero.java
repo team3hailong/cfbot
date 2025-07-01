@@ -19,6 +19,7 @@ import java.util.List;
 import jsclub.codefest.sdk.model.players.Player;
 import jsclub.codefest.sdk.model.npcs.Enemy;
 import jsclub.codefest.sdk.algorithm.PathUtils;
+import jsclub.codefest.sdk.model.weapon.Weapon;
 
 public class Hero {
     private String playerName = "";
@@ -396,7 +397,7 @@ public class Hero {
     public static void main(String[] args) {
         // Nhập trực tiếp các thông tin cần thiết
         String secretKey = "sk-_UgcHnbHQACXmdeS-1263w:ZcELGs3FRAvZSBLpHoYD6KN6ylSqmx0yBZB-grJUsZYBQhUNmmtY3E62vFtWOEyRX3JCwXpRy6d4IzqcJ3LCFg"; // <-- Thay bằng secretKey thật
-        String gameID = "147996";      // <-- Thay bằng gameID thật
+        String gameID = "178994";      // <-- Thay bằng gameID thật
         String playerName = "YOUR_PLAYER_NAME_HERE"; // <-- Thay bằng tên người chơi
         String serverURL = "https://cf25-server.jsclub.dev";   // <-- Thay bằng URL server
 
@@ -424,6 +425,18 @@ public class Hero {
                 }
                 if (me.getHealth() <= 0) {
                     System.out.println("Player đã chết, không thực hiện hành động");
+                    return;
+                }
+                // Nếu bị STUN, ưu tiên dùng vật phẩm giải hiệu ứng nếu có
+                if (hero.isStunned()) {
+                    System.out.println("Bot đang bị STUN, ưu tiên dùng vật phẩm giải hiệu ứng nếu có");
+                    for (HealingItem item : inv.getListHealingItem()) {
+                        if ("ELIXIR".equals(item.getId()) || "MAGIC".equals(item.getId()) || "COMPASS".equals(item.getId())) {
+                            hero.useItem(item.getId());
+                            return;
+                        }
+                    }
+                    // Nếu không có vật phẩm giải hiệu ứng, không làm gì cả
                     return;
                 }
 
@@ -475,25 +488,62 @@ public class Hero {
                     if (p.getHealth() != null && p.getHealth() > 0) {
                         Node opp = new Node(p.x, p.y);
                         int distance = dist(myPos, opp);
+                        int myStrength = evaluateStrength(me, inv);
+                        int oppStrength = evaluateStrength(p, null); // Không có inventory đối thủ, chỉ dựa vào máu và vũ khí cơ bản
+                        System.out.println("So sánh sức mạnh: mình=" + myStrength + ", đối thủ=" + oppStrength);
                         if (distance == 1) {
-                            System.out.println("Gần player khác ở khoảng cách 1, sẽ tấn công hoặc bắn");
-                            if (inv.getMelee() != null && !"HAND".equals(inv.getMelee().getId())) {
-                                System.out.println("Tấn công bằng melee: " + inv.getMelee().getId());
-                                hero.attack(directionTo(myPos, opp));
+                            if (myStrength > oppStrength || p.getHealth() < 20) {
+                                System.out.println("Mạnh hơn hoặc đối thủ yếu, sẽ tấn công hoặc bắn");
+                                if (inv.getMelee() != null && !"HAND".equals(inv.getMelee().getId())) {
+                                    System.out.println("Tấn công bằng melee: " + inv.getMelee().getId());
+                                    hero.attack(directionTo(myPos, opp));
+                                    return;
+                                } else if (inv.getGun() != null) {
+                                    System.out.println("Bắn bằng súng: " + inv.getGun().getId());
+                                    hero.shoot(directionTo(myPos, opp));
+                                    return;
+                                }
+                            } else if (myStrength < oppStrength) {
+                                System.out.println("Đối thủ mạnh hơn, ưu tiên né tránh");
+                                String safeDir = safeDirection(myPos, opp, map);
+                                hero.move(safeDir);
                                 return;
-                            } else if (inv.getGun() != null) {
-                                System.out.println("Bắn bằng súng: " + inv.getGun().getId());
+                            } else {
+                                System.out.println("Sức mạnh ngang cơ, cân nhắc tấn công nếu máu mình còn nhiều");
+                                if (me.getHealth() > 40) {
+                                    if (inv.getMelee() != null && !"HAND".equals(inv.getMelee().getId())) {
+                                        hero.attack(directionTo(myPos, opp));
+                                        return;
+                                    } else if (inv.getGun() != null) {
+                                        hero.shoot(directionTo(myPos, opp));
+                                        return;
+                                    }
+                                } else {
+                                    // Nếu máu thấp, ưu tiên hồi máu hoặc né
+                                    if (!inv.getListHealingItem().isEmpty()) {
+                                        HealingItem bestHeal = getBestHealingItem(inv.getListHealingItem());
+                                        if (bestHeal != null) {
+                                            hero.useItem(bestHeal.getId());
+                                            return;
+                                        }
+                                    }
+                                    String safeDir = safeDirection(myPos, opp, map);
+                                    hero.move(safeDir);
+                                    return;
+                                }
+                            }
+                        } else if (distance <= 6 && inv.getGun() != null) {
+                            if (myStrength >= oppStrength || p.getHealth() < 20) {
+                                System.out.println("Bắn player ở xa bằng súng: " + inv.getGun().getId());
                                 hero.shoot(directionTo(myPos, opp));
                                 return;
                             }
-                        } else if (distance <= 6 && inv.getGun() != null) {
-                            System.out.println("Bắn player ở xa bằng súng: " + inv.getGun().getId());
-                            hero.shoot(directionTo(myPos, opp));
-                            return;
                         } else if (distance <= 6 && inv.getThrowable() != null) {
-                            System.out.println("Ném vật phẩm vào player ở xa: " + inv.getThrowable().getId());
-                            hero.throwItem(directionTo(myPos, opp), distance);
-                            return;
+                            if (myStrength >= oppStrength || p.getHealth() < 20) {
+                                System.out.println("Ném vật phẩm vào player ở xa: " + inv.getThrowable().getId());
+                                hero.throwItem(directionTo(myPos, opp), distance);
+                                return;
+                            }
                         }
                     }
                 }
@@ -508,13 +558,34 @@ public class Hero {
                 if (bestItem != null) {
                     boolean isChest = map.getListChests().stream().anyMatch(chest -> chest.x == bestItem.x && chest.y == bestItem.y);
                     if (isChest) {
+                        // Ưu tiên bắn rương từ xa nếu có thể
+                        if (inv.getGun() != null) {
+                            String gunDir = getGunDirectionToChest(myPos, bestItem, inv.getGun());
+                            if (gunDir != null) {
+                                System.out.println("Bắn rương từ xa bằng súng " + inv.getGun().getId() + " hướng: " + gunDir + ", tầm: " + inv.getGun().getRange());
+                                hero.shoot(gunDir);
+                                return;
+                            }
+                        }
+                        // Ưu tiên tấn công rương từ xa bằng Melee nếu có thể
+                        if (inv.getMelee() != null && !"HAND".equals(inv.getMelee().getId())) {
+                            String meleeDir = getMeleeDirectionToChest(myPos, bestItem, inv.getMelee());
+                            if (meleeDir != null) {
+                                System.out.println("Tấn công rương từ xa bằng melee " + inv.getMelee().getId() + " hướng: " + meleeDir + ", độ rộng: " + inv.getMelee().getRange());
+                                hero.attack(meleeDir);
+                                return;
+                            }
+                        }
+                        // Nếu không bắn/tấn công được từ xa thì xử lý như cũ
                         if (dist(myPos, bestItem) == 1) {
                             String dir = directionTo(myPos, bestItem);
                             System.out.println("Đứng cạnh rương, sẽ tấn công/chest ở hướng: " + dir);
                             if (inv.getGun() != null) {
+                                System.out.println("Bắn rương bằng súng " + inv.getGun().getId() + " có tầm: " + inv.getGun().getRange());
                                 hero.shoot(dir);
                             } else if (inv.getMelee() != null) {
                                 hero.attack(dir);
+                                System.out.println("Tấn công rương bằng melee " + inv.getMelee().getId() + " có tầm: " + inv.getMelee().getRange());
                             }
                             return;
                         } else {
@@ -559,42 +630,6 @@ public class Hero {
                             }
                             hero.move(String.valueOf(path.charAt(0)));
                             return;
-                        }
-                    }
-                }
-
-                // 6. Tấn công rương gần đó nếu có vũ khí (chỉ khi không có items quan trọng)
-                List<Node> chests = new ArrayList<>();
-                for (var chest : map.getListChests()) {
-                    chests.add(new Node(chest.x, chest.y));
-                }
-                boolean hasImportantItemsNearby = false;
-                if (bestItem != null) {
-                    int itemDist = dist(myPos, bestItem);
-                    if (itemDist <= 3) {
-                        hasImportantItemsNearby = true;
-                    }
-                }
-                if (!hasImportantItemsNearby) {
-                    System.out.println("Không có item quan trọng gần, sẽ tấn công rương nếu gần");
-                    for (Node chest : chests) {
-                        if (dist(myPos, chest) <= 3) {
-                            if (dist(myPos, chest) == 1) {
-                                System.out.println("Tấn công rương ở hướng: " + directionTo(myPos, chest));
-                                if (inv.getGun() != null) {
-                                    System.out.println("Tấn công rương bằng súng: " + inv.getGun().getId());
-                                    hero.shoot(directionTo(myPos, chest));
-                                    return;
-                                } else if (inv.getMelee() != null) {
-                                    System.out.println("Tấn công rương bằng melee: " + inv.getMelee().getId());
-                                    hero.attack(directionTo(myPos, chest));
-                                    return;
-                                }
-                            } else {
-                                System.out.println("Di chuyển tới rương để tấn công: " + chest);
-                                hero.move(directionTo(myPos, chest));
-                                return;
-                            }
                         }
                     }
                 }
@@ -663,8 +698,8 @@ public class Hero {
         int maxDist = -1;
         String bestDir = "u";
         for (String dir : dirs) {
-            Node next = moveTo(me, dir);
-            int d = dist(next, enemy);
+            Node nextPos = moveTo(me, dir);
+            int d = dist(nextPos, enemy);
             if (d > maxDist) {
                 maxDist = d;
                 bestDir = dir;
@@ -964,30 +999,37 @@ public class Hero {
                 }
             }
             
+            // Check for STUN trap ở vị trí tiếp theo
+            boolean hasStunTrap = false;
+            for (var trap : map.getListTraps()) {
+                if (trap.getX() == nextPos.x && trap.getY() == nextPos.y && trap.getTag() != null && trap.getTag().contains(jsclub.codefest.sdk.model.obstacles.ObstacleTag.HERO_HIT_BY_BAT_WILL_BE_STUNNED)) {
+                    hasStunTrap = true;
+                    break;
+                }
+            }
+            if (!isSafe || hasStunTrap) continue;
+            
             // Check for items in this direction
-            if (isSafe) {
-                // Look for items within 3 steps in this direction
-                for (int step = 1; step <= 3; step++) {
-                    Node checkPos = myPos;
-                    for (int i = 0; i < step; i++) {
-                        checkPos = moveTo(checkPos, dir);
-                    }
-                    
-                    if (map.getAllGun().contains(checkPos) || 
-                        map.getAllMelee().contains(checkPos) || 
-                        map.getAllThrowable().contains(checkPos) || 
-                        map.getAllSpecial().contains(checkPos) || 
-                        map.getListArmors().contains(checkPos) || 
-                        map.getListHealingItems().contains(checkPos)) {
-                        hasItems = true;
-                        break;
-                    }
+            for (int step = 1; step <= 3; step++) {
+                Node checkPos = nextPos;
+                for (int i = 0; i < step; i++) {
+                    checkPos = moveTo(checkPos, dir);
                 }
                 
-                safeDirs.add(dir);
-                if (hasItems) {
-                    itemDirs.add(dir);
+                if (map.getAllGun().contains(checkPos) || 
+                    map.getAllMelee().contains(checkPos) || 
+                    map.getAllThrowable().contains(checkPos) || 
+                    map.getAllSpecial().contains(checkPos) || 
+                    map.getListArmors().contains(checkPos) || 
+                    map.getListHealingItems().contains(checkPos)) {
+                    hasItems = true;
+                    break;
                 }
+            }
+            
+            safeDirs.add(dir);
+            if (hasItems) {
+                itemDirs.add(dir);
             }
         }
         
@@ -1004,4 +1046,70 @@ public class Hero {
         // Last resort: random direction
         return dirs[(int)(Math.random() * 4)];
     }
+
+    // Kiểm tra rương có nằm trong vùng bắn của súng không
+    private static String getGunDirectionToChest(Node myPos, Node chestPos, Weapon gun) {
+        if (gun == null) return null;
+        int range = gun.getRange(); // chiều dài
+        // Tạm thời assume rộng = 1 (bắn thẳng hàng)
+        // Nếu cần mở rộng, có thể lấy thêm thông tin từ AttackRange hoặc bổ sung trường riêng
+        if (myPos.x == chestPos.x) {
+            // Cùng hàng ngang
+            int dy = chestPos.y - myPos.y;
+            if (dy > 0 && dy <= range) return "u";
+            if (dy < 0 && -dy <= range) return "d";
+        } else if (myPos.y == chestPos.y) {
+            // Cùng cột
+            int dx = chestPos.x - myPos.x;
+            if (dx > 0 && dx <= range) return "r";
+            if (dx < 0 && -dx <= range) return "l";
+        }
+        return null;
+    }
+
+    // Kiểm tra rương có nằm trong vùng tấn công của Melee không (dựa vào độ rộng getRange)
+    private static String getMeleeDirectionToChest(Node myPos, Node chestPos, Weapon melee) {
+        if (melee == null) return null;
+        int width = melee.getRange(); // độ rộng (số ô vuông góc với hướng đánh)
+        // Melee chỉ đánh 1 ô phía trước mặt, nhưng có thể rộng nhiều ô
+        // Kiểm tra 4 hướng
+        // Hướng lên (u): các ô (myPos.x, myPos.y - i), i từ -(width/2) đến width/2, và (myPos.x-1, myPos.y - i)
+        for (int i = -width/2; i <= width/2; i++) {
+            if (myPos.x-1 == chestPos.x && myPos.y+i == chestPos.y) return "r";
+            if (myPos.x+1 == chestPos.x && myPos.y+i == chestPos.y) return "l";
+            if (myPos.x+i == chestPos.x && myPos.y-1 == chestPos.y) return "d";
+            if (myPos.x+i == chestPos.x && myPos.y+1 == chestPos.y) return "u";
+        }
+        return null;
+    }
+
+    // Hàm kiểm tra bot có bị STUN không
+    private boolean isStunned() {
+        for (Effect e : effects) {
+            if (e.id != null && e.id.toUpperCase().contains("STUN")) return true;
+        }
+        return false;
+    }
+
+    // Thêm hàm đánh giá sức mạnh tổng thể của player
+    // Điểm càng cao càng mạnh
+    private static int evaluateStrength(Player p, Inventory inv) {
+        int score = 0;
+        if (p == null) return 0;
+        // Máu
+        if (p.getHealth() != null) score += p.getHealth();
+        // Vũ khí
+        if (inv != null) {
+            if (inv.getGun() != null) score += getBasePickupPoints(inv.getGun().getId()) + 20;
+            if (inv.getMelee() != null && !"HAND".equals(inv.getMelee().getId())) score += getBasePickupPoints(inv.getMelee().getId()) + 10;
+            if (inv.getArmor() != null) score += getBasePickupPoints(inv.getArmor().getId());
+            if (inv.getHelmet() != null) score += getBasePickupPoints(inv.getHelmet().getId());
+            score += inv.getListHealingItem().size() * 5;
+        } else {
+            // Đối thủ: chỉ biết máu, tạm cộng điểm nếu máu cao
+            if (p.getHealth() != null && p.getHealth() > 80) score += 10;
+        }
+        return score;
+    }
 }
+
