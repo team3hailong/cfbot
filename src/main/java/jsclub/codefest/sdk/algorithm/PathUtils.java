@@ -129,4 +129,21 @@ public class PathUtils {
         if (!existPath) return null;
         return ans.toString();
     }
+
+    /**
+     * Tính khoảng cách Manhattan từ một node tới biên vùng an toàn (bo)
+     */
+    public static int distToSafeZone(Node pos, int safeZone, int mapSize) {
+        int center = mapSize / 2;
+        int minX = center - safeZone;
+        int maxX = center + safeZone;
+        int minY = center - safeZone;
+        int maxY = center + safeZone;
+        int dx = 0, dy = 0;
+        if (pos.x < minX) dx = minX - pos.x;
+        else if (pos.x > maxX) dx = pos.x - maxX;
+        if (pos.y < minY) dy = minY - pos.y;
+        else if (pos.y > maxY) dy = pos.y - maxY;
+        return dx + dy;
+    }
 }

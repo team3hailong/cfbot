@@ -14,6 +14,8 @@ import java.util.List;
 import java.util.Set;
 
 public class StatBotUtils {
+    private static List<Node> recentPositions = new ArrayList<>();
+
     public static int dist(Node a, Node b) {
         return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
     }
@@ -76,6 +78,13 @@ public class StatBotUtils {
         // 1. Điểm cơ bản theo loại vật phẩm
         try {
             if ("weapon".equals(itemType)) {
+                // Nếu chưa có vũ khí (gun, melee, special đều null hoặc HAND), cộng thêm 50 điểm
+                boolean hasWeapon = (inv.getGun() != null) ||
+                                   (inv.getMelee() != null && !"HAND".equals(inv.getMelee().getId())) ||
+                                   (inv.getSpecial() != null);
+                if (!hasWeapon) {
+                    base += 50;
+                }
                 var weapon = jsclub.codefest.sdk.factory.WeaponFactory.getWeaponById(itemId);
                 if (weapon != null) {
                     base += weapon.getDamage() * 1.5 + weapon.getRange() * 2;
@@ -125,22 +134,21 @@ public class StatBotUtils {
                 if (isBetterArmor(inv, itemId) && (inv.getArmor() == null)) shouldBonus = true;
                 if (isBetterHelmet(inv, itemId) && (inv.getHelmet() == null)) shouldBonus = true;
             } else if ("healing".equals(itemType)) {
-                if (inv.getListHealingItem() == null || inv.getListHealingItem().isEmpty()) shouldBonus = true;
+                if (inv.getListHealingItem().isEmpty() || inv.getListHealingItem().size() < 2) shouldBonus = true;
             } else if ("special".equals(itemType)) {
                 if (inv.getSpecial() == null) shouldBonus = true;
             }
             if (shouldBonus){
                 System.out.println("shouldBonus: itemId=" + itemId + ", itemType=" + itemType + ", shouldBonus=" + shouldBonus);
-                base += 200;
+                base += 222;
             } 
         }
         // 3. Rương: cộng điểm theo tỉ lệ ra đồ xịn
         if (isChest) {
-            base += chestGoodRate * 300;
+            base += chestGoodRate * 247;
         }
         // 4. Tình trạng hiện tại
         if ("healing".equals(itemType)) {
-            if (inv.getListHealingItem().size() < 2) base += 50;
             if (myHP < 50) base += 40;
             if (myHP < 30) base += 60;
         }
@@ -178,7 +186,7 @@ public class StatBotUtils {
         if ("ROPE".equals(itemId)) base += 400; // Rất hữu ích cho combat
         if ("BELL".equals(itemId)) base += 350; // Hữu ích cho crowd control
         if ("SAHUR_BAT".equals(itemId)) base += 300; // Hữu ích cho escape
-        if ("SHOTGUN".equals(itemId) || "MACE".equals(itemId)) base += 150;
+        if ("SHOTGUN".equals(itemId) || "MACE".equals(itemId)) base += 125;
         if ("AXE".equals(itemId) || "KNIFE".equals(itemId)) base += 100;
         return base;
     }
@@ -209,7 +217,6 @@ public class StatBotUtils {
         Player me = map.getCurrentPlayer();
         float myHP = (me != null && me.getHealth() != null) ?  me.getHealth() : 100;
         boolean isDanger = false;
-        
         // Kiểm tra Enemy gần (chỉ để tránh, không tấn công)
         for (Enemy e : map.getListEnemies()) {
             if (dist(myPos, new Node(e.x, e.y)) <= 1) {
@@ -217,7 +224,6 @@ public class StatBotUtils {
                 break;
             }
         }
-        
         // Kiểm tra Player khác gần (có thể tấn công)
         for (Player otherPlayer : map.getOtherPlayerInfo()) {
             if (otherPlayer.getHealth() != null && otherPlayer.getHealth() > 0) {
@@ -227,16 +233,17 @@ public class StatBotUtils {
                 }
             }
         }
-        
         Node best = null;
         double bestScore = Double.NEGATIVE_INFINITY;
+        int safeZone = map.getSafeZone();
+        int mapSize = map.getMapSize();
+        boolean myPosInSafe = jsclub.codefest.sdk.algorithm.PathUtils.checkInsideSafeArea(myPos, safeZone, mapSize);
         for (Node item : allItems) {
             if (excludeItems != null && excludeItems.contains(item)) continue;
             String itemId = getItemIdByPosition(map, item);
             String itemType = getItemTypeByPosition(map, item);
             boolean isChest = isChest(map, item);
             double chestGoodRate = isChest ? 0.8 : 0.0; // Giả định tỉ lệ ra đồ xịn với rương là 80%
-            
             // Kiểm tra xem có Player khác gần vật phẩm này không
             boolean itemNearOtherPlayer = false;
             for (Player otherPlayer : map.getOtherPlayerInfo()) {
@@ -247,14 +254,29 @@ public class StatBotUtils {
                     }
                 }
             }
-            
+            // Bổ sung: Nếu là rương ngoài bo, chỉ cho phép lấy nếu cầm HAND, máu đủ lớn, không có địch gần
+            if (isChest) {
+                boolean chestInSafe = jsclub.codefest.sdk.algorithm.PathUtils.checkInsideSafeArea(item, safeZone, mapSize);
+                if (!chestInSafe) {
+                    boolean hasHand = (inv.getMelee() != null && "HAND".equals(inv.getMelee().getId()));
+                    boolean safeHP = myHP > 50; // Có thể điều chỉnh ngưỡng máu này
+                    boolean noEnemyNear = true;
+                    for (Enemy e : map.getListEnemies()) {
+                        if (dist(item, new Node(e.x, e.y)) <= 2) {
+                            noEnemyNear = false;
+                            break;
+                        }
+                    }
+                    if (!(hasHand && safeHP && noEnemyNear)) {
+                        continue; // Bỏ qua rương ngoài bo nếu không đủ điều kiện an toàn
+                    }
+                }
+            }
             double score = getBasePickupPoints(itemId, itemType, inv, map, myPos, item, isDanger, isChest, chestGoodRate, myHP);
-            
             // Giảm điểm nếu vật phẩm gần Player khác (có thể bị cướp)
             if (itemNearOtherPlayer) {
                 score -= 100;
             }
-            
             if (score > bestScore) {
                 bestScore = score;
                 best = item;
@@ -358,22 +380,39 @@ public class StatBotUtils {
                     return;
                 }
             }
-            if (map.getAllGun().contains(itemPos) && inv.getGun() != null) {
+            if (map.getAllGun().stream().anyMatch(g -> g.x == itemPos.x && g.y == itemPos.y) && inv.getGun() != null) {
                 hero.revokeItem(inv.getGun().getId());
-            } else if (map.getAllMelee().contains(itemPos) && inv.getMelee() != null && 
+            } else if (map.getAllMelee().stream().anyMatch(m -> m.x == itemPos.x && m.y == itemPos.y) && inv.getMelee() != null && 
                        !inv.getMelee().getId().equals("HAND")) {
                 hero.revokeItem(inv.getMelee().getId());
-            } else if (map.getAllSpecial().contains(itemPos) && inv.getSpecial() != null) {
-                // Special weapons cũng chỉ được giữ tối đa 1 vật phẩm, cần revoke trước khi nhặt mới
+            } else if (map.getAllSpecial().stream().anyMatch(s -> s.x == itemPos.x && s.y == itemPos.y) && inv.getSpecial() != null) {
                 hero.revokeItem(inv.getSpecial().getId());
-            } else if (map.getListArmors().contains(itemPos) && (inv.getArmor() != null || inv.getHelmet() != null)) {
-                if (inv.getArmor() != null) {
-                    hero.revokeItem(inv.getArmor().getId());
+            } else if (map.getListArmors().stream().anyMatch(a -> a.x == itemPos.x && a.y == itemPos.y)) {
+                // Xác định loại item (armor hay helmet)
+                String itemId = StatBotUtils.getItemIdByPosition(map, itemPos);
+                String itemType = "unknown";
+                for (var a : map.getListArmors()) {
+                    if (a.x == itemPos.x && a.y == itemPos.y) {
+                        if (a.getType() != null && a.getType().toString().equals("ARMOR")) {
+                            itemType = "armor";
+                        } else if (a.getType() != null && a.getType().toString().equals("HELMET")) {
+                            itemType = "helmet";
+                        }
+                        break;
+                    }
                 }
-                if (inv.getHelmet() != null) {
-                    hero.revokeItem(inv.getHelmet().getId());
+                if (itemType.equals("armor") && inv.getArmor() != null) {
+                    // Chỉ bỏ armor nếu cái mới tốt hơn
+                    if (StatBotUtils.isBetterArmor(inv, itemId)) {
+                        hero.revokeItem(inv.getArmor().getId());
+                    }
+                } else if (itemType.equals("helmet") && inv.getHelmet() != null) {
+                    // Chỉ bỏ helmet nếu cái mới tốt hơn
+                    if (StatBotUtils.isBetterHelmet(inv, itemId)) {
+                        hero.revokeItem(inv.getHelmet().getId());
+                    }
                 }
-            } else if (map.getListHealingItems().contains(itemPos) && inv.getListHealingItem().size() >= 4) {
+            } else if (map.getListHealingItems().stream().anyMatch(h -> h.x == itemPos.x && h.y == itemPos.y) && inv.getListHealingItem().size() >= 4) {
                 HealingItem worstHeal = inv.getListHealingItem().stream()
                     .min((a, b) -> Integer.compare(getBasePickupPointsSimple(a.getId()), getBasePickupPointsSimple(b.getId())))
                     .orElse(null);
@@ -396,6 +435,19 @@ public class StatBotUtils {
             .orElse(null);
     }
     /**
+     * Kiểm tra một ô có phải obstacle gây stun không
+     */
+    public static boolean isStunObstacle(GameMap map, Node pos) {
+        for (Obstacle obs : map.getListObstacles()) {
+            if (obs.getX() == pos.x && obs.getY() == pos.y && obs.getTag() != null) {
+                if (obs.getTag().contains(jsclub.codefest.sdk.model.obstacles.ObstacleTag.HERO_HIT_BY_BAT_WILL_BE_STUNNED)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    /**
      * Tìm hướng di chuyển tối ưu dựa trên nhiều yếu tố
      * @param myPos vị trí hiện tại
      * @param map bản đồ game
@@ -409,21 +461,143 @@ public class StatBotUtils {
         List<String> safeDirs = new ArrayList<>();
         List<String> itemDirs = new ArrayList<>();
         List<String> escapeDirs = new ArrayList<>();
-        
+        // Lấy máu hiện tại
+        float myHP = 100;
+        if (map.getCurrentPlayer() != null && map.getCurrentPlayer().getHealth() != null) {
+            myHP = map.getCurrentPlayer().getHealth();
+        }
+        // Kiểm tra có nhiều player gần không
+        boolean isChased = false;
+        int nearbyPlayers = 0;
+        for (Player otherPlayer : map.getOtherPlayerInfo()) {
+            if (otherPlayer.getHealth() != null && otherPlayer.getHealth() > 0) {
+                if (dist(myPos, new Node(otherPlayer.x, otherPlayer.y)) <= 3) {
+                    nearbyPlayers++;
+                }
+            }
+        }
+        if (nearbyPlayers >= 2) isChased = true;
+        // Nếu máu yếu hoặc bị truy đuổi, ưu tiên hướng về obstacle phòng thủ
+        if (myHP < 40 || isChased) {
+            Node defObs = findNearestDefensiveObstacle(map, myPos);
+            if (defObs != null) {
+                String dirToObs = directionTo(myPos, defObs);
+                Node nextPos = moveTo(myPos, dirToObs);
+                boolean isSafe = true;
+                for (Enemy enemy : map.getListEnemies()) {
+                    if (dist(nextPos, new Node(enemy.x, enemy.y)) <= 2) { // tránh xa 2 ô
+                        isSafe = false;
+                        break;
+                    }
+                }
+                for (Player otherPlayer : map.getOtherPlayerInfo()) {
+                    if (otherPlayer.getHealth() != null && otherPlayer.getHealth() > 0) {
+                        if (dist(nextPos, new Node(otherPlayer.x, otherPlayer.y)) <= 2) {
+                            isSafe = false;
+                            break;
+                        }
+                    }
+                }
+                if (isSafe && !isStunObstacle(map, nextPos)) {
+                    if (!recentPositions.contains(nextPos)) {
+                        recentPositions.add(new Node(nextPos.x, nextPos.y));
+                        if (recentPositions.size() > 10) recentPositions.remove(0);
+                        return dirToObs;
+                    }
+                }
+            }
+        }
+        // --- BỔ SUNG CHẠY VÒNG BO ---
+        // Nếu đang ngoài bo, ưu tiên chạy vào bo
+        int safeZone = map.getSafeZone();
+        int mapSize = map.getMapSize();
+        boolean myPosInSafe = jsclub.codefest.sdk.algorithm.PathUtils.checkInsideSafeArea(myPos, safeZone, mapSize);
+        int center = mapSize / 2;
+        Node centerNode = new Node(center, center);
+        boolean centerInSafe = jsclub.codefest.sdk.algorithm.PathUtils.checkInsideSafeArea(centerNode, safeZone, mapSize);
+        // Nếu đang ngoài bo, ưu tiên chạy vào bo
+        if (!myPosInSafe) {
+            // Chỉ gọi getShortestPath nếu đích nằm trong bo
+            if (centerInSafe) {
+                String pathToBo = jsclub.codefest.sdk.algorithm.PathUtils.getShortestPath(map, new ArrayList<>(), myPos, centerNode, true); // skipDarkArea = true để cho phép vào bo
+                if (pathToBo != null && !pathToBo.isEmpty()) {
+                    String dir = String.valueOf(pathToBo.charAt(0));
+                    Node nextPos = moveTo(myPos, dir);
+                    boolean isSafe = true;
+                    // Kiểm tra enemy gần
+                    for (Enemy enemy : map.getListEnemies()) {
+                        if (dist(nextPos, new Node(enemy.x, enemy.y)) <= 2) {
+                            isSafe = false;
+                            break;
+                        }
+                    }
+                    // Kiểm tra player khác gần
+                    for (Player otherPlayer : map.getOtherPlayerInfo()) {
+                        if (otherPlayer.getHealth() != null && otherPlayer.getHealth() > 0) {
+                            if (dist(nextPos, new Node(otherPlayer.x, otherPlayer.y)) <= 2) {
+                                isSafe = false;
+                                break;
+                            }
+                        }
+                    }
+                    // Kiểm tra bẫy stun
+                    if (isStunObstacle(map, nextPos)) isSafe = false;
+                    if (isSafe && !recentPositions.contains(nextPos)) {
+                        recentPositions.add(new Node(nextPos.x, nextPos.y));
+                        if (recentPositions.size() > 10) recentPositions.remove(0);
+                        System.out.println("BOT OUTSIDE SAFEZONE: moving " + dir + " to get inside safezone");
+                        return dir;
+                    }
+                } else {
+                    System.out.println("BOT OUTSIDE SAFEZONE: getShortestPath trả về null hoặc rỗng!");
+                }
+            }
+            // Nếu không tìm được đường vào bo, chọn hướng bất kỳ vào gần bo nhất
+            String bestDir = null;
+            int minDist = Integer.MAX_VALUE;
+            for (String dir : dirs) {
+                Node nextPos = moveTo(myPos, dir);
+                int distToSafe = jsclub.codefest.sdk.algorithm.PathUtils.distToSafeZone(nextPos, safeZone, mapSize);
+                if (distToSafe < minDist) {
+                    minDist = distToSafe;
+                    bestDir = dir;
+                }
+            }
+            if (bestDir != null) {
+                System.out.println("BOT OUTSIDE SAFEZONE: fallback move " + bestDir + " to get closer to safezone");
+                recentPositions.add(moveTo(myPos, bestDir));
+                if (recentPositions.size() > 10) recentPositions.remove(0);
+                return bestDir;
+            }
+        }
+        // Xử lý từng hướng
         for (String dir : dirs) {
             Node nextPos = moveTo(myPos, dir);
             boolean isSafe = true;
             boolean hasItems = false;
             int escapeScore = 0;
-            
-            // Kiểm tra Enemy (chỉ để tránh, không tấn công)
+            // Tránh enemy trong phạm vi 2 ô, nhận diện loại enemy
             for (Enemy enemy : map.getListEnemies()) {
-                if (dist(nextPos, new Node(enemy.x, enemy.y)) <= 1) {
-                    isSafe = false;
-                    break;
+                Node enemyPos = new Node(enemy.x, enemy.y);
+                int d = dist(nextPos, enemyPos);
+                String enemyId = enemy.getId() != null ? enemy.getId().toUpperCase() : "";
+                if (enemyId.equals("SPIRIT")) {
+                    // Nếu là SPIRIT và máu thấp, ưu tiên tiếp cận
+                    if (myHP < 60 && d == 1) {
+                        return dir;
+                    }
+                } else if (enemyId.equals("GOLEM") || enemyId.equals("RHINO") || enemyId.equals("ANACONDA") || enemyId.equals("LEOPARD") || enemyId.equals("NATIVE") || enemyId.equals("GHOST")) {
+                    if (d <= 2) {
+                        isSafe = false;
+                        break;
+                    }
+                } else {
+                    if (d <= 2) {
+                        isSafe = false;
+                        break;
+                    }
                 }
             }
-            
             // Kiểm tra Player khác (có thể tấn công)
             for (Player otherPlayer : map.getOtherPlayerInfo()) {
                 if (otherPlayer.getHealth() != null && otherPlayer.getHealth() > 0) {
@@ -433,7 +607,6 @@ public class StatBotUtils {
                     }
                 }
             }
-            
             // Kiểm tra bẫy stun
             boolean hasStunTrap = false;
             for (var trap : map.getListTraps()) {
@@ -443,15 +616,28 @@ public class StatBotUtils {
                     break;
                 }
             }
-            
+            // Kiểm tra obstacle gây stun ở ô tiếp theo hoặc các ô liền kề
+            if (isStunObstacle(map, nextPos)) {
+                isSafe = false;
+            } else {
+                int[] dx = {0, 0, -1, 1};
+                int[] dy = {-1, 1, 0, 0};
+                for (int i = 0; i < 4; i++) {
+                    Node adj = new Node(nextPos.x + dx[i], nextPos.y + dy[i]);
+                    if (isStunObstacle(map, adj)) {
+                        isSafe = false;
+                        break;
+                    }
+                }
+            }
+            // Tránh lặp lại vị trí cũ
+            if (recentPositions.contains(nextPos)) isSafe = false;
             if (!isSafe || hasStunTrap) continue;
-            
             // Tính điểm trốn thoát nếu có enemy target
             if (targetEnemy != null) {
                 int d = dist(nextPos, targetEnemy);
                 escapeScore = d;
             }
-            
             // Kiểm tra vật phẩm trong tầm nhìn (nếu prioritizeItems = true)
             if (prioritizeItems) {
                 for (int step = 1; step <= 3; step++) {
@@ -470,7 +656,6 @@ public class StatBotUtils {
                     }
                 }
             }
-            
             safeDirs.add(dir);
             if (hasItems) {
                 itemDirs.add(dir);
@@ -479,7 +664,6 @@ public class StatBotUtils {
                 escapeDirs.add(dir);
             }
         }
-        
         // Logic ưu tiên:
         // 1. Nếu có enemy target và cần trốn thoát, ưu tiên hướng xa enemy nhất
         if (targetEnemy != null && !escapeDirs.isEmpty()) {
@@ -493,21 +677,44 @@ public class StatBotUtils {
                     bestEscapeDir = dir;
                 }
             }
+            recentPositions.add(moveTo(myPos, bestEscapeDir));
+            if (recentPositions.size() > 10) recentPositions.remove(0);
             return bestEscapeDir;
         }
-        
         // 2. Nếu ưu tiên vật phẩm và có hướng có vật phẩm
         if (prioritizeItems && !itemDirs.isEmpty()) {
-            return itemDirs.get((int)(Math.random() * itemDirs.size()));
+            String dir = itemDirs.get((int)(Math.random() * itemDirs.size()));
+            recentPositions.add(moveTo(myPos, dir));
+            if (recentPositions.size() > 10) recentPositions.remove(0);
+            return dir;
         }
-        
         // 3. Chọn hướng an toàn ngẫu nhiên
         if (!safeDirs.isEmpty()) {
-            return safeDirs.get((int)(Math.random() * safeDirs.size()));
+            String dir = safeDirs.get((int)(Math.random() * safeDirs.size()));
+            recentPositions.add(moveTo(myPos, dir));
+            if (recentPositions.size() > 10) recentPositions.remove(0);
+            return dir;
         }
-        
-        // 4. Fallback: chọn ngẫu nhiên
-        return dirs[(int)(Math.random() * 4)];
+        // 4. Fallback: chọn hướng ra xa enemy nhất nếu không còn hướng an toàn
+        int maxDist = -1;
+        String bestDir = "u";
+        for (String dir : dirs) {
+            Node nextPos = moveTo(myPos, dir);
+            // BỔ SUNG: Không chọn hướng đi vào bẫy stun khi fallback
+            if (isStunObstacle(map, nextPos)) continue;
+            int minDistToEnemy = Integer.MAX_VALUE;
+            for (Enemy enemy : map.getListEnemies()) {
+                int d = dist(nextPos, new Node(enemy.x, enemy.y));
+                if (d < minDistToEnemy) minDistToEnemy = d;
+            }
+            if (minDistToEnemy > maxDist) {
+                maxDist = minDistToEnemy;
+                bestDir = dir;
+            }
+        }
+        recentPositions.add(moveTo(myPos, bestDir));
+        if (recentPositions.size() > 10) recentPositions.remove(0);
+        return bestDir;
     }
 
     // Giữ lại các hàm cũ để tương thích ngược
@@ -736,12 +943,38 @@ public class StatBotUtils {
     }
 
     /**
+     * Tìm hướng dùng SAHUR_BAT để đánh đối thủ vào obstacle gây stun gần nhất
+     */
+    public static String findBatStunDirection(GameMap map, Node myPos) {
+        for (Player otherPlayer : map.getOtherPlayerInfo()) {
+            if (otherPlayer.getHealth() != null && otherPlayer.getHealth() > 0) {
+                Node playerPos = new Node(otherPlayer.x, otherPlayer.y);
+                int distance = dist(myPos, playerPos);
+                if (distance <= 5) {
+                    String direction = directionTo(myPos, playerPos);
+                    if (direction != null && !direction.isEmpty()) {
+                        // Kiểm tra obstacle gây stun phía sau player
+                        Node behindPlayer = moveTo(playerPos, direction);
+                        if (isStunObstacle(map, behindPlayer)) {
+                            return direction;
+                        }
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
      * Logic sử dụng SAHUR_BAT (Gậy đánh bóng)
      * - Đẩy player ra xa khi bị bao vây
      * - Đẩy player vào obstacle để gây stun
      * - Tạo khoảng cách an toàn
      */
     private static String shouldUseSahurBat(GameMap map, Inventory inv, Node myPos) {
+        // Ưu tiên đánh đối thủ vào obstacle gây stun
+        String stunDir = findBatStunDirection(map, myPos);
+        if (stunDir != null) return stunDir;
         // Kiểm tra player khác gần
         for (Player otherPlayer : map.getOtherPlayerInfo()) {
             if (otherPlayer.getHealth() != null && otherPlayer.getHealth() > 0) {
@@ -766,7 +999,6 @@ public class StatBotUtils {
                 }
             }
         }
-        
         return null;
     }
 
@@ -917,5 +1149,31 @@ public class StatBotUtils {
         }
         
         return score;
+    }
+
+    /**
+     * Tìm obstacle phòng thủ (BUSH, POND, obstacle lớn) gần nhất
+     */
+    public static Node findNearestDefensiveObstacle(GameMap map, Node myPos) {
+        List<Node> candidates = new ArrayList<>();
+        for (Obstacle obs : map.getListObstacles()) {
+            if (obs.getTag() != null && (
+                obs.getTag().contains(jsclub.codefest.sdk.model.obstacles.ObstacleTag.CAN_GO_THROUGH) ||
+                "BUSH".equals(obs.getId()) ||
+                obs.getHp() < 0 // indestructible obstacle
+            )) {
+                candidates.add(new Node(obs.getX(), obs.getY()));
+            }
+        }
+        Node best = null;
+        int minDist = Integer.MAX_VALUE;
+        for (Node n : candidates) {
+            int d = dist(myPos, n);
+            if (d < minDist) {
+                minDist = d;
+                best = n;
+            }
+        }
+        return best;
     }
 } 

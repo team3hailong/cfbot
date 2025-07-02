@@ -23,7 +23,7 @@ public class StatBotMain {
     public static void main(String[] args) {
         // Nhập trực tiếp các thông tin cần thiết
         String secretKey = "sk-_UgcHnbHQACXmdeS-1263w:ZcELGs3FRAvZSBLpHoYD6KN6ylSqmx0yBZB-grJUsZYBQhUNmmtY3E62vFtWOEyRX3JCwXpRy6d4IzqcJ3LCFg"; // <-- Thay bằng secretKey thật
-        String gameID = "144141";      // <-- Thay bằng gameID thật
+        String gameID = "155375";      // <-- Thay bằng gameID thật
         String playerName = "YOUR_PLAYER_NAME_HERE"; // <-- Thay bằng tên người chơi
         String serverURL = "https://cf25-server.jsclub.dev";   // <-- Thay bằng URL server
 
@@ -123,12 +123,47 @@ public class StatBotMain {
                     if (targetItemId.equals(currentId) && !"chest".equals(currentType)) {
                         // Item mục tiêu vẫn còn và không phải rương, tiếp tục di chuyển/nhặt nó
                         System.out.println("Tiếp tục nhặt item mục tiêu: (" + targetItemPos.x + "," + targetItemPos.y + ") id=" + targetItemId);
-                        String path = PathUtils.getShortestPath(map, new ArrayList<>(), me, targetItemPos, false);
+                        // BỔ SUNG: Tránh các node là rương, obstacle và trap gây STUN khi tìm đường
+                        List<Node> restrictedNodes = new ArrayList<>();
+                        for (var chest : map.getListChests()) {
+                            restrictedNodes.add(new Node(chest.x, chest.y));
+                        }
+                        // Thêm các obstacle gây STUN
+                        for (var obs : map.getListObstacles()) {
+                            if (obs.getTag() != null && obs.getTag().contains(jsclub.codefest.sdk.model.obstacles.ObstacleTag.HERO_HIT_BY_BAT_WILL_BE_STUNNED)) {
+                                restrictedNodes.add(new Node(obs.getX(), obs.getY()));
+                            }
+                        }
+                        // Thêm các trap gây STUN
+                        for (var trap : map.getListTraps()) {
+                            if (trap.getTag() != null && trap.getTag().contains(jsclub.codefest.sdk.model.obstacles.ObstacleTag.HERO_HIT_BY_BAT_WILL_BE_STUNNED)) {
+                                restrictedNodes.add(new Node(trap.getX(), trap.getY()));
+                            }
+                        }
+                        // LOG restrictedNodes
+                        System.out.println("Restricted nodes (tránh STUN):");
+                        for (Node n : restrictedNodes) {
+                            System.out.println(" - (" + n.x + "," + n.y + ")");
+                        }
+                        String path = PathUtils.getShortestPath(map, restrictedNodes, me, targetItemPos, false);
+                        System.out.println("Đường đi tới item: " + path);
                         if (path == null) {
-                            System.out.println("Không tìm được đường đi tới item mục tiêu");
-                            // Reset để tìm item mới ở lần sau
-                            targetItemPos = null;
-                            targetItemId = null;
+                            System.out.println("Không tìm được đường đi tới item");
+                            // Nếu đang ở ngoài bo, tìm hướng di chuyển về phía bo
+                            int center = map.getMapSize() / 2;
+                            int dx = Integer.compare(center, myPos.x);
+                            int dy = Integer.compare(center, myPos.y);
+                            String moveDir = null;
+                            if (Math.abs(dx) > Math.abs(dy)) {
+                                moveDir = dx > 0 ? "u" : "d";
+                            } else if (dy != 0) {
+                                moveDir = dy > 0 ? "r" : "l";
+                            } else {
+                                moveDir = "u"; // fallback nếu đã ở tâm
+                            }
+                            System.out.println("BOT OUTSIDE SAFEZONE: fallback move " + moveDir + " to get closer to safezone");
+                            hero.move(moveDir);
+                            return;
                         } else if (path.isEmpty()) {
                             hero.pickupItem();
                             // Reset sau khi nhặt xong
@@ -151,7 +186,7 @@ public class StatBotMain {
                 }
 
                 // 1. Emergency healing khi máu rất thấp (ưu tiên cao nhất)
-                if (me.getHealth() < 20 && !inv.getListHealingItem().isEmpty()) {
+                if (me.getHealth() < 25 && !inv.getListHealingItem().isEmpty()) {
                     System.out.println("Đang ở chế độ hồi máu khẩn cấp");
                     HealingItem bestHeal = StatBotUtils.getBestHealingItem(inv.getListHealingItem());
                     if (bestHeal != null) {
@@ -311,6 +346,13 @@ public class StatBotMain {
                 if (bestItem != null) {
                     boolean isChest = map.getListChests().stream().anyMatch(chest -> chest.x == bestItem.x && chest.y == bestItem.y);
                     if (isChest) {
+                        // Nếu máu quá thấp thì mới bỏ phá rương để chạy
+                        if (me.getHealth() != null && me.getHealth() < 20) {
+                            System.out.println("Máu quá thấp, ưu tiên bỏ chạy thay vì phá rương!");
+                            String escapeDir = StatBotUtils.findSmartDirection(myPos, map, inv);
+                            hero.move(escapeDir);
+                            return;
+                        }
                         // Ưu tiên bắn rương từ xa nếu có thể
                         if (inv.getGun() != null) {
                             String gunDir = StatBotUtils.getGunDirectionToChest(myPos, bestItem, inv.getGun());
@@ -342,26 +384,81 @@ public class StatBotMain {
                             }
                             return;
                         } else {
-                            String path = PathUtils.getShortestPath(map, new ArrayList<>(), me, bestItem, false);
-                            if (path == null) {
-                                System.out.println("Không tìm được đường đi tới rương");
-                            } else if (path.isEmpty()) {
-                                System.out.println("Đã tới cạnh rương, sẽ nhặt hoặc tấn công");
-                            } else {
-                                System.out.println("Di chuyển tới rương, bước đầu: " + path.charAt(0));
+                            // Nếu mục tiêu không phải rương, thêm node rương vào restrictedNodes
+                            List<Node> restrictedNodes = new ArrayList<>();
+                            for (var chest : map.getListChests()) {
+                                restrictedNodes.add(new Node(chest.x, chest.y));
                             }
-                            if (path != null && !path.isEmpty()) {
+                            // Thêm các obstacle gây STUN
+                            for (var obs : map.getListObstacles()) {
+                                if (obs.getTag() != null && obs.getTag().contains(jsclub.codefest.sdk.model.obstacles.ObstacleTag.HERO_HIT_BY_BAT_WILL_BE_STUNNED)) {
+                                    restrictedNodes.add(new Node(obs.getX(), obs.getY()));
+                                }
+                            }
+                            // Thêm các trap gây STUN
+                            for (var trap : map.getListTraps()) {
+                                if (trap.getTag() != null && trap.getTag().contains(jsclub.codefest.sdk.model.obstacles.ObstacleTag.HERO_HIT_BY_BAT_WILL_BE_STUNNED)) {
+                                    restrictedNodes.add(new Node(trap.getX(), trap.getY()));
+                                }
+                            }
+                            String path = PathUtils.getShortestPath(map, restrictedNodes, me, bestItem, false);
+                            System.out.println("Đường đi tới item: " + path);
+                            if (path == null) {
+                                System.out.println("Không tìm được đường đi tới item");
+                            } else {
+                                if (path.isEmpty()) {
+                                    // Trước khi nhặt, luôn kiểm tra và revoke nếu cần
+                                    StatBotUtils.manageInventoryBeforePickup(map, inv, bestItem, hero);
+                                    hero.pickupItem();
+                                    // Kiểm tra lại nếu inventory vẫn đầy (không nhặt được)
+                                    if ((map.getListHealingItems().contains(bestItem) && inv.getListHealingItem().size() >= 4)
+                                        || (map.getAllGun().contains(bestItem) && inv.getGun() != null)
+                                        || (map.getAllMelee().contains(bestItem) && inv.getMelee() != null && !inv.getMelee().getId().equals("HAND"))
+                                        || (map.getListArmors().contains(bestItem) && (inv.getArmor() != null || inv.getHelmet() != null))) {
+                                        String escapeDir = StatBotUtils.findSmartDirection(myPos, map, inv);
+                                        System.out.println("Inventory đầy, không nhặt được item, di chuyển sang hướng: " + escapeDir);
+                                        hero.move(escapeDir);
+                                        // Đánh dấu node này là đã thử nhặt nhưng thất bại
+                                        failedPickupItems.add(bestItem);
+                                    }
+                                    return;
+                                }
+                                if (path.length() == 1) {
+                                    System.out.println("Sắp nhặt item, kiểm tra/revoke inventory nếu cần");
+                                    StatBotUtils.manageInventoryBeforePickup(map, inv, bestItem, hero);
+                                }
                                 hero.move(String.valueOf(path.charAt(0)));
                                 return;
                             }
                         }
                     } else {
-                        String path = PathUtils.getShortestPath(map, new ArrayList<>(), me, bestItem, false);
+                        // Nếu mục tiêu không phải rương, thêm node rương vào restrictedNodes
+                        List<Node> restrictedNodes = new ArrayList<>();
+                        for (var chest : map.getListChests()) {
+                            restrictedNodes.add(new Node(chest.x, chest.y));
+                        }
+                        // Thêm các obstacle gây STUN
+                        for (var obs : map.getListObstacles()) {
+                            if (obs.getTag() != null && obs.getTag().contains(jsclub.codefest.sdk.model.obstacles.ObstacleTag.HERO_HIT_BY_BAT_WILL_BE_STUNNED)) {
+                                restrictedNodes.add(new Node(obs.getX(), obs.getY()));
+                            }
+                        }
+                        // Thêm các trap gây STUN
+                        for (var trap : map.getListTraps()) {
+                            if (trap.getTag() != null && trap.getTag().contains(jsclub.codefest.sdk.model.obstacles.ObstacleTag.HERO_HIT_BY_BAT_WILL_BE_STUNNED)) {
+                                restrictedNodes.add(new Node(trap.getX(), trap.getY()));
+                            }
+                        }
+                        String path = PathUtils.getShortestPath(map, restrictedNodes, me, bestItem, false);
+                        System.out.println("Đường đi tới item: " + path);
                         if (path == null) {
                             System.out.println("Không tìm được đường đi tới item");
                         } else {
                             if (path.isEmpty()) {
+                                // Trước khi nhặt, luôn kiểm tra và revoke nếu cần
+                                StatBotUtils.manageInventoryBeforePickup(map, inv, bestItem, hero);
                                 hero.pickupItem();
+                                // Kiểm tra lại nếu inventory vẫn đầy (không nhặt được)
                                 if ((map.getListHealingItems().contains(bestItem) && inv.getListHealingItem().size() >= 4)
                                     || (map.getAllGun().contains(bestItem) && inv.getGun() != null)
                                     || (map.getAllMelee().contains(bestItem) && inv.getMelee() != null && !inv.getMelee().getId().equals("HAND"))
@@ -393,7 +490,20 @@ public class StatBotMain {
                     if (nearestHeal == null) {
                         System.out.println("Không có healing item nào gần");
                     } else {
-                        String path = PathUtils.getShortestPath(map, new ArrayList<>(), me, nearestHeal, false);
+                        // BỔ SUNG: Tránh các obstacle và trap gây STUN khi tìm đường tới healing item
+                        List<Node> restrictedNodes = new ArrayList<>();
+                        for (var obs : map.getListObstacles()) {
+                            if (obs.getTag() != null && obs.getTag().contains(jsclub.codefest.sdk.model.obstacles.ObstacleTag.HERO_HIT_BY_BAT_WILL_BE_STUNNED)) {
+                                restrictedNodes.add(new Node(obs.getX(), obs.getY()));
+                            }
+                        }
+                        for (var trap : map.getListTraps()) {
+                            if (trap.getTag() != null && trap.getTag().contains(jsclub.codefest.sdk.model.obstacles.ObstacleTag.HERO_HIT_BY_BAT_WILL_BE_STUNNED)) {
+                                restrictedNodes.add(new Node(trap.getX(), trap.getY()));
+                            }
+                        }
+                        String path = PathUtils.getShortestPath(map, restrictedNodes, me, nearestHeal, false);
+                        System.out.println("Đường đi tới healing item: " + path);
                         if (path == null) {
                             System.out.println("Không tìm được đường đi tới healing item");
                         } else if (path.isEmpty()) {
