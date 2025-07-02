@@ -11,6 +11,7 @@ import jsclub.codefest.sdk.model.obstacles.Obstacle;
 import jsclub.codefest.sdk.model.armors.Armor;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 public class StatBotUtils {
     public static int dist(Node a, Node b) {
@@ -106,9 +107,36 @@ public class StatBotUtils {
         // 2. Khoảng cách
         int distance = dist(myPos, itemPos);
         base -= distance * 2;
+        
+        // Nếu vật phẩm ngay gần (distance == 1) và chưa có vật phẩm cùng loại thì cộng 150 điểm
+        if (distance == 1) {
+            boolean shouldBonus = false;
+            if ("weapon".equals(itemType)) {
+                // Kiểm tra nếu là gun, melee, special dựa vào id
+                var weapon = jsclub.codefest.sdk.factory.WeaponFactory.getWeaponById(itemId);
+                if (weapon != null) {
+                    var weaponType = weapon.getType();
+                    if (weaponType == jsclub.codefest.sdk.model.ElementType.GUN && (inv.getGun() == null || "HAND".equals(inv.getGun().getId()))) shouldBonus = true;
+                    else if (weaponType == jsclub.codefest.sdk.model.ElementType.MELEE && (inv.getMelee() == null || "HAND".equals(inv.getMelee().getId()))) shouldBonus = true;
+                    else if (weaponType == jsclub.codefest.sdk.model.ElementType.SPECIAL && inv.getSpecial() == null) shouldBonus = true;
+                }
+            } else if ("armor".equals(itemType)) {
+                // Kiểm tra riêng armor và helmet
+                if (isBetterArmor(inv, itemId) && (inv.getArmor() == null)) shouldBonus = true;
+                if (isBetterHelmet(inv, itemId) && (inv.getHelmet() == null)) shouldBonus = true;
+            } else if ("healing".equals(itemType)) {
+                if (inv.getListHealingItem() == null || inv.getListHealingItem().isEmpty()) shouldBonus = true;
+            } else if ("special".equals(itemType)) {
+                if (inv.getSpecial() == null) shouldBonus = true;
+            }
+            if (shouldBonus){
+                System.out.println("shouldBonus: itemId=" + itemId + ", itemType=" + itemType + ", shouldBonus=" + shouldBonus);
+                base += 200;
+            } 
+        }
         // 3. Rương: cộng điểm theo tỉ lệ ra đồ xịn
         if (isChest) {
-            base += chestGoodRate * 312;
+            base += chestGoodRate * 300;
         }
         // 4. Tình trạng hiện tại
         if ("healing".equals(itemType)) {
@@ -130,7 +158,7 @@ public class StatBotUtils {
         // 7. Kiểm tra Player khác gần vật phẩm (có thể cướp)
         if (map != null) {
             for (Player otherPlayer : map.getOtherPlayerInfo()) {
-                if (otherPlayer.getHealth() != null && otherPlayer.getHealth() > 0) {
+                if (otherPlayer.getHealth() != null && otherPlayer.getHealth() >= myHP) {
                     int playerDistance = dist(itemPos, new Node(otherPlayer.x, otherPlayer.y));
                     if (playerDistance <= 3) {
                         // Giảm điểm nếu có Player khác gần vật phẩm
@@ -144,6 +172,8 @@ public class StatBotUtils {
         if ("COMPASS".equals(itemId)) base += 500;
         if ("MAGIC_ARMOR".equals(itemId)) base += 300;
         if ("MAGIC_HELMET".equals(itemId)) base += 200;
+        // Ưu tiên DRAGON_EGG cao nhất
+        if ("DRAGON_EGG".equals(itemId)) base += 1500;
         // Ưu tiên special weapons cao hơn
         if ("ROPE".equals(itemId)) base += 400; // Rất hữu ích cho combat
         if ("BELL".equals(itemId)) base += 350; // Hữu ích cho crowd control
@@ -166,7 +196,7 @@ public class StatBotUtils {
         return false;
     }
 
-    public static Node findBestItemToPickup(GameMap map, Inventory inv, Node myPos) {
+    public static Node findBestItemToPickup(GameMap map, Inventory inv, Node myPos, Set<Node> excludeItems) {
         List<Node> allItems = new ArrayList<>();
         allItems.addAll(map.getAllGun());
         allItems.addAll(map.getAllMelee());
@@ -201,6 +231,7 @@ public class StatBotUtils {
         Node best = null;
         double bestScore = Double.NEGATIVE_INFINITY;
         for (Node item : allItems) {
+            if (excludeItems != null && excludeItems.contains(item)) continue;
             String itemId = getItemIdByPosition(map, item);
             String itemType = getItemTypeByPosition(map, item);
             boolean isChest = isChest(map, item);
@@ -535,6 +566,54 @@ public class StatBotUtils {
             if (p.getHealth() != null && p.getHealth() > 80) score += 10;
         }
         return score;
+    }
+    
+    /**
+     * Đánh giá sức mạnh có xem xét effects
+     * @param p Player
+     * @param inv Inventory
+     * @param effects Danh sách effects hiện tại
+     * @return Điểm sức mạnh đã điều chỉnh theo effects
+     */
+    public static int evaluateStrengthWithEffects(Player p, Inventory inv, List<jsclub.codefest.sdk.model.effects.Effect> effects) {
+        int baseScore = evaluateStrength(p, inv);
+        
+        if (effects == null || effects.isEmpty()) {
+            return baseScore;
+        }
+        
+        // Điều chỉnh điểm theo effects
+        for (jsclub.codefest.sdk.model.effects.Effect effect : effects) {
+            if (effect.id == null) continue;
+            
+            String effectId = effect.id.toUpperCase();
+            
+            // Effects có lợi - tăng điểm
+            if (effectId.contains("INVISIBLE")) {
+                baseScore += 50; // Tàng hình giúp tấn công bất ngờ
+            } else if (effectId.contains("UNDEAD")) {
+                baseScore += 100; // Bất tử rất mạnh
+            } else if (effectId.contains("CONTROL_IMMUNITY")) {
+                baseScore += 80; // Miễn khống chế rất hữu ích
+            } else if (effectId.contains("REVIVAL")) {
+                baseScore += 200; // Hồi sinh cực kỳ mạnh
+            }
+            
+            // Effects có hại - giảm điểm
+            else if (effectId.contains("STUN")) {
+                baseScore -= 200; // Stun làm mất khả năng hành động
+            } else if (effectId.contains("BLIND")) {
+                baseScore -= 150; // Blind làm mất khả năng nhìn
+            } else if (effectId.contains("REVERSE")) {
+                baseScore -= 100; // Reverse làm khó di chuyển
+            } else if (effectId.contains("POISON")) {
+                baseScore -= 30; // Poison gây sát thương theo thời gian
+            } else if (effectId.contains("BLEED")) {
+                baseScore -= 50; // Bleed nguy hiểm hơn Poison
+            }
+        }
+        
+        return Math.max(0, baseScore); // Không để điểm âm
     }
     public static String directionTo(Node a, Node b) {
         if (a.x < b.x) return "r";

@@ -5,17 +5,25 @@ import jsclub.codefest.sdk.base.Node;
 import jsclub.codefest.sdk.model.GameMap;
 import jsclub.codefest.sdk.model.Inventory;
 import jsclub.codefest.sdk.model.healing_items.HealingItem;
+import jsclub.codefest.sdk.model.effects.Effect;
 
 import jsclub.codefest.sdk.model.players.Player;
 import jsclub.codefest.sdk.algorithm.PathUtils;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
 
 public class StatBotMain {
+    static Set<Node> failedPickupItems = new HashSet<>();
+    static int lastInventoryHash = 0;
+    static Node targetItemPos = null;
+    static String targetItemId = null;
+
     public static void main(String[] args) {
         // Nhập trực tiếp các thông tin cần thiết
         String secretKey = "sk-_UgcHnbHQACXmdeS-1263w:ZcELGs3FRAvZSBLpHoYD6KN6ylSqmx0yBZB-grJUsZYBQhUNmmtY3E62vFtWOEyRX3JCwXpRy6d4IzqcJ3LCFg"; // <-- Thay bằng secretKey thật
-        String gameID = "146559";      // <-- Thay bằng gameID thật
+        String gameID = "144141";      // <-- Thay bằng gameID thật
         String playerName = "YOUR_PLAYER_NAME_HERE"; // <-- Thay bằng tên người chơi
         String serverURL = "https://cf25-server.jsclub.dev";   // <-- Thay bằng URL server
 
@@ -45,21 +53,102 @@ public class StatBotMain {
                     System.out.println("Player đã chết, không thực hiện hành động");
                     return;
                 }
-                // Nếu bị STUN, ưu tiên dùng vật phẩm giải hiệu ứng nếu có
-                if (EffectUtils.isStunned(hero.getEffects())) {
-                    System.out.println("Bot đang bị STUN, ưu tiên dùng vật phẩm giải hiệu ứng nếu có");
-                    for (HealingItem item : inv.getListHealingItem()) {
-                        if ("ELIXIR".equals(item.getId()) || "MAGIC".equals(item.getId()) || "COMPASS".equals(item.getId())) {
-                            hero.useItem(item.getId());
-                            return;
+                // Xử lý effects một cách thông minh
+                List<Effect> currentEffects = hero.getEffects();
+                System.out.println("Effects hiện tại: " + EffectUtils.getEffectsDescription(currentEffects));
+                
+                // Kiểm tra và xử lý effects theo mức độ ưu tiên
+                int effectPriority = EffectUtils.getEffectPriority(currentEffects);
+                if (effectPriority > 0) {
+                    System.out.println("Bot đang bị effects với mức ưu tiên: " + effectPriority);
+                    
+                    // Ưu tiên cao nhất: Stun/Blind/Reverse - cần giải ngay
+                    if (EffectUtils.isControlled(currentEffects)) {
+                        System.out.println("Bot đang bị khống chế, ưu tiên dùng vật phẩm giải hiệu ứng");
+                        for (HealingItem item : inv.getListHealingItem()) {
+                            if ("ELIXIR".equals(item.getId())) {
+                                System.out.println("Sử dụng ELIXIR để giải khống chế");
+                                hero.useItem(item.getId());
+                                return;
+                            }
+                        }
+                        // Nếu không có ELIXIR, thử dùng COMPASS để stun area
+                        for (HealingItem item : inv.getListHealingItem()) {
+                            if ("COMPASS".equals(item.getId())) {
+                                System.out.println("Sử dụng COMPASS để stun area");
+                                hero.useItem(item.getId());
+                                return;
+                            }
+                        }
+                        // Nếu không có vật phẩm giải hiệu ứng, không làm gì cả
+                        return;
+                    }
+                    
+                    // Ưu tiên trung bình: Poison/Bleed - cần hồi máu
+                    if (EffectUtils.isTakingDamageOverTime(currentEffects)) {
+                        System.out.println("Bot đang bị sát thương theo thời gian, ưu tiên hồi máu");
+                        if (!inv.getListHealingItem().isEmpty()) {
+                            HealingItem bestHeal = StatBotUtils.getBestHealingItem(inv.getListHealingItem());
+                            if (bestHeal != null) {
+                                System.out.println("Sử dụng healing item: " + bestHeal.getId());
+                                hero.useItem(bestHeal.getId());
+                                return;
+                            }
+                        }
+                        
+                        // Nếu không có healing item, thử dùng MAGIC để tàng hình
+                        for (HealingItem item : inv.getListHealingItem()) {
+                            if ("MAGIC".equals(item.getId())) {
+                                System.out.println("Sử dụng MAGIC để tàng hình thoát khỏi nguy hiểm");
+                                hero.useItem(item.getId());
+                                return;
+                            }
                         }
                     }
-                    // Nếu không có vật phẩm giải hiệu ứng, không làm gì cả
-                    return;
+                }
+                
+                // Kiểm tra effects có lợi
+                if (EffectUtils.hasBeneficialEffects(currentEffects)) {
+                    System.out.println("Bot đang có effects có lợi: " + EffectUtils.getEffectsDescription(currentEffects));
+                    // Có thể tận dụng effects có lợi để tấn công mạnh hơn
                 }
 
                 Node myPos = new Node(me.x, me.y);
                 System.out.println("Vị trí hiện tại: (" + myPos.x + "," + myPos.y + ") HP: " + me.getHealth());
+
+                // Ưu tiên tiếp tục nhặt item mục tiêu nếu còn tồn tại và không phải rương
+                if (targetItemPos != null && targetItemId != null) {
+                    String currentId = StatBotUtils.getItemIdByPosition(map, targetItemPos);
+                    String currentType = StatBotUtils.getItemTypeByPosition(map, targetItemPos);
+                    if (targetItemId.equals(currentId) && !"chest".equals(currentType)) {
+                        // Item mục tiêu vẫn còn và không phải rương, tiếp tục di chuyển/nhặt nó
+                        System.out.println("Tiếp tục nhặt item mục tiêu: (" + targetItemPos.x + "," + targetItemPos.y + ") id=" + targetItemId);
+                        String path = PathUtils.getShortestPath(map, new ArrayList<>(), me, targetItemPos, false);
+                        if (path == null) {
+                            System.out.println("Không tìm được đường đi tới item mục tiêu");
+                            // Reset để tìm item mới ở lần sau
+                            targetItemPos = null;
+                            targetItemId = null;
+                        } else if (path.isEmpty()) {
+                            hero.pickupItem();
+                            // Reset sau khi nhặt xong
+                            targetItemPos = null;
+                            targetItemId = null;
+                        } else {
+                            if (path.length() == 1) {
+                                System.out.println("Sắp nhặt item mục tiêu, kiểm tra/revoke inventory nếu cần");
+                                StatBotUtils.manageInventoryBeforePickup(map, inv, targetItemPos, hero);
+                            }
+                            hero.move(String.valueOf(path.charAt(0)));
+                        }
+                        return;
+                    } else {
+                        // Nếu là rương hoặc item mục tiêu đã bị nhặt, reset target để xử lý như cũ
+                        System.out.println("Item mục tiêu đã biến mất, bị nhặt hoặc là rương, reset target");
+                        targetItemPos = null;
+                        targetItemId = null;
+                    }
+                }
 
                 // 1. Emergency healing khi máu rất thấp (ưu tiên cao nhất)
                 if (me.getHealth() < 20 && !inv.getListHealingItem().isEmpty()) {
@@ -78,6 +167,18 @@ public class StatBotMain {
                 List<Player> others = map.getOtherPlayerInfo();
                 System.out.println("Other players: " + others.size());
                 
+                // Kiểm tra xem có nên tránh combat do effects không
+                if (EffectUtils.shouldAvoidCombat(currentEffects)) {
+                    System.out.println("Bot đang bị effects không thuận lợi cho combat, ưu tiên né tránh");
+                    // Tìm hướng an toàn để di chuyển
+                    String safeDir = StatBotUtils.findSmartDirection(myPos, map, inv);
+                    if (safeDir != null) {
+                        System.out.println("Di chuyển theo hướng an toàn: " + safeDir);
+                        hero.move(safeDir);
+                        return;
+                    }
+                }
+                
                 // 4.1. Kiểm tra sử dụng special weapon trước
                 String specialDirection = StatBotUtils.shouldUseSpecialWeapon(map, inv, myPos);
                 if (specialDirection != null) {
@@ -90,11 +191,19 @@ public class StatBotMain {
                     if (p.getHealth() != null && p.getHealth() > 0) {
                         Node opp = new Node(p.x, p.y);
                         int distance = StatBotUtils.dist(myPos, opp);
-                        int myStrength = StatBotUtils.evaluateStrength(me, inv);
+                        int myStrength = StatBotUtils.evaluateStrengthWithEffects(me, inv, currentEffects);
                         int oppStrength = StatBotUtils.evaluateStrength(p, null); // Không có inventory đối thủ, chỉ dựa vào máu và vũ khí cơ bản
-                        System.out.println("So sánh sức mạnh: mình=" + myStrength + ", đối thủ=" + oppStrength);
+                        System.out.println("So sánh sức mạnh (có xem xét effects): mình=" + myStrength + ", đối thủ=" + oppStrength);
                         
                         if (distance == 1) {
+                            // Kiểm tra xem có thể tấn công an toàn không
+                            if (!EffectUtils.canAttackSafely(currentEffects)) {
+                                System.out.println("Không thể tấn công an toàn do effects, ưu tiên né tránh");
+                                String safeDir = StatBotUtils.safeDirection(myPos, opp, map);
+                                hero.move(safeDir);
+                                return;
+                            }
+                            
                             if (myStrength > oppStrength || p.getHealth() < 20) {
                                 System.out.println("Mạnh hơn hoặc đối thủ yếu, sẽ tấn công hoặc bắn");
                                 String attackDirection = StatBotUtils.directionTo(myPos, opp);
@@ -154,6 +263,14 @@ public class StatBotMain {
                                 }
                             }
                         } else if (distance <= 6) {
+                            // Kiểm tra xem có thể tấn công từ xa an toàn không
+                            if (!EffectUtils.canAttackSafely(currentEffects)) {
+                                System.out.println("Không thể tấn công từ xa an toàn do effects, ưu tiên né tránh");
+                                String safeDir = StatBotUtils.safeDirection(myPos, opp, map);
+                                hero.move(safeDir);
+                                return;
+                            }
+                            
                             String attackDirection = StatBotUtils.directionTo(myPos, opp);
                             
                             // Kiểm tra special weapon cho tấn công từ xa
@@ -177,11 +294,19 @@ public class StatBotMain {
                 }
 
                 // 5. Quản lý inventory thông minh và nhặt items (ưu tiên cao)
-                Node bestItem = StatBotUtils.findBestItemToPickup(map, inv, myPos);
+                int currentInventoryHash = inv.hashCode();
+                if (currentInventoryHash != lastInventoryHash) {
+                    failedPickupItems.clear();
+                    lastInventoryHash = currentInventoryHash;
+                }
+                Node bestItem = StatBotUtils.findBestItemToPickup(map, inv, myPos, failedPickupItems);
                 if (bestItem == null) {
                     System.out.println("Không tìm thấy item tốt để nhặt");
                 } else {
                     System.out.println("Best item để nhặt: (" + bestItem.x + "," + bestItem.y + ")");
+                    // Lưu lại item mục tiêu để ưu tiên nhặt ở các bước tiếp theo
+                    targetItemPos = bestItem;
+                    targetItemId = StatBotUtils.getItemIdByPosition(map, bestItem);
                 }
                 if (bestItem != null) {
                     boolean isChest = map.getListChests().stream().anyMatch(chest -> chest.x == bestItem.x && chest.y == bestItem.y);
@@ -217,7 +342,7 @@ public class StatBotMain {
                             }
                             return;
                         } else {
-                            String path = PathUtils.getShortestPath(map, new ArrayList<>(), me, bestItem, true);
+                            String path = PathUtils.getShortestPath(map, new ArrayList<>(), me, bestItem, false);
                             if (path == null) {
                                 System.out.println("Không tìm được đường đi tới rương");
                             } else if (path.isEmpty()) {
@@ -234,12 +359,7 @@ public class StatBotMain {
                         String path = PathUtils.getShortestPath(map, new ArrayList<>(), me, bestItem, false);
                         if (path == null) {
                             System.out.println("Không tìm được đường đi tới item");
-                        } else if (path.isEmpty()) {
-                            System.out.println("Đã tới nơi, sẽ nhặt item");
                         } else {
-                            System.out.println("Di chuyển tới item, bước đầu: " + path.charAt(0));
-                        }
-                        if (path != null) {
                             if (path.isEmpty()) {
                                 hero.pickupItem();
                                 if ((map.getListHealingItems().contains(bestItem) && inv.getListHealingItem().size() >= 4)
@@ -249,6 +369,8 @@ public class StatBotMain {
                                     String escapeDir = StatBotUtils.findSmartDirection(myPos, map, inv);
                                     System.out.println("Inventory đầy, không nhặt được item, di chuyển sang hướng: " + escapeDir);
                                     hero.move(escapeDir);
+                                    // Đánh dấu node này là đã thử nhặt nhưng thất bại
+                                    failedPickupItems.add(bestItem);
                                 }
                                 return;
                             }
@@ -291,6 +413,12 @@ public class StatBotMain {
                 }
 
                 // 8. Di chuyển thông minh - ưu tiên hướng an toàn và có items
+                // Kiểm tra xem có thể di chuyển bình thường không
+                if (!EffectUtils.canMoveNormally(currentEffects)) {
+                    System.out.println("Không thể di chuyển bình thường do effects, không thực hiện hành động");
+                    return;
+                }
+                
                 String smartDir = StatBotUtils.findSmartDirection(myPos, map, inv);
                 System.out.println("Hướng di chuyển thông minh: " + smartDir);
                 hero.move(smartDir);
