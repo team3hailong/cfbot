@@ -147,7 +147,9 @@ public class StatBotUtils {
         int base = 0;
         // 1. Điểm cơ bản theo loại vật phẩm
         try {
+            Object modelObj = null;
             if ("weapon".equals(itemType)) {
+                modelObj = jsclub.codefest.sdk.factory.WeaponFactory.getWeaponById(itemId);
                 // Nếu chưa có vũ khí (gun, melee, special đều null hoặc HAND), cộng thêm 50 điểm
                 boolean hasWeapon = (inv.getGun() != null) ||
                                    (inv.getMelee() != null && !"HAND".equals(inv.getMelee().getId())) ||
@@ -155,30 +157,48 @@ public class StatBotUtils {
                 if (!hasWeapon) {
                     base += 50;
                 }
-                var weapon = jsclub.codefest.sdk.factory.WeaponFactory.getWeaponById(itemId);
-                if (weapon != null) {
+                if (modelObj != null) {
+                    Weapon weapon = (Weapon) modelObj;
                     base += weapon.getDamage() * 1.5 + weapon.getRange() * 2;
                     if (weapon.getEffects() != null) base += weapon.getEffects().size() * 10;
                 }
             } else if ("armor".equals(itemType) || "helmet".equals(itemType)) {
-                var armor = jsclub.codefest.sdk.factory.ArmorFactory.getArmorById(itemId);
-                if (armor != null) {
+                modelObj = jsclub.codefest.sdk.factory.ArmorFactory.getArmorById(itemId);
+                if (modelObj != null) {
+                    Armor armor = (Armor) modelObj;
                     base += armor.getDamageReduce() * 2 + armor.getHealthPoint() * 1.5;
                 }
             } else if ("healing".equals(itemType)) {
-                var heal = jsclub.codefest.sdk.factory.HealingItemFactory.getHealingItemById(itemId);
-                if (heal != null) {
+                modelObj = jsclub.codefest.sdk.factory.HealingItemFactory.getHealingItemById(itemId);
+                if (modelObj != null) {
+                    HealingItem heal = (HealingItem) modelObj;
                     base += heal.getHealingHP() * 2;
                     if (heal.getEffects() != null) base += heal.getEffects().size() * 10;
                 }
             } else if ("special".equals(itemType)) {
-                var weapon = jsclub.codefest.sdk.factory.WeaponFactory.getWeaponById(itemId);
-                if (weapon != null) {
+                modelObj = jsclub.codefest.sdk.factory.WeaponFactory.getWeaponById(itemId);
+                if (modelObj != null) {
+                    Weapon weapon = (Weapon) modelObj;
                     base += weapon.getDamage() * 1.5 + weapon.getRange() * 2;
                     if (weapon.getEffects() != null) base += weapon.getEffects().size() * 10;
                 }
             } else {
                 base += 10; // fallback cho loại không xác định
+            }
+            // Nếu object model có hàm getPickupPoints, cộng điểm này vào base
+            if (modelObj != null) {
+                try {
+                    java.lang.reflect.Method method = modelObj.getClass().getMethod("getPickupPoints");
+                    Object pickupPoints = method.invoke(modelObj);
+                    if (pickupPoints instanceof Integer) {
+                        System.out.println("pickupPoints: " + pickupPoints);
+                        base += (Integer) pickupPoints*2;
+                    }
+                } catch (NoSuchMethodException nsme) {
+                    // Không có hàm getPickupPoints, bỏ qua
+                } catch (Exception e) {
+                    // Lỗi khác khi gọi, bỏ qua
+                }
             }
         } catch (Exception e) {
             base += 10;
@@ -187,8 +207,8 @@ public class StatBotUtils {
         int distance = dist(myPos, itemPos);
         base -= distance * 2;
         
-        // Nếu vật phẩm ngay gần (distance == 1) và chưa có vật phẩm cùng loại thì cộng 150 điểm
-        if (distance == 1) {
+        // Nếu vật phẩm ngay gần (distance < 4) và chưa có vật phẩm cùng loại thì cộng 250 điểm
+        if (distance < 4) {
             boolean shouldBonus = false;
             if ("weapon".equals(itemType)) {
                 // Kiểm tra nếu là gun, melee, special dựa vào id
@@ -204,7 +224,7 @@ public class StatBotUtils {
                 if (isBetterArmor(inv, itemId) && (inv.getArmor() == null)) shouldBonus = true;
                 if (isBetterHelmet(inv, itemId) && (inv.getHelmet() == null)) shouldBonus = true;
             } else if ("healing".equals(itemType)) {
-                if (inv.getListHealingItem().isEmpty() || inv.getListHealingItem().size() < 2) shouldBonus = true;
+                if (inv.getListHealingItem().isEmpty() || inv.getListHealingItem().size() < 3) shouldBonus = true;
             } else if ("special".equals(itemType)) {
                 if (inv.getSpecial() == null) shouldBonus = true;
             }

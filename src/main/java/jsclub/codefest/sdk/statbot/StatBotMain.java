@@ -27,6 +27,7 @@ public class StatBotMain {
     static Node lastPickedItemPos = null; // Vị trí item cuối cùng đã nhặt
     static long lastPickupTime = 0; // Thời gian nhặt item cuối cùng
     static Map<String, List<Node>> playerPositions = new HashMap<>(); // Lịch sử vị trí của các player
+    static long startTime = 0; // Thời điểm bắt đầu trận đấu (ms)
 
     // === Các hàm tiện ích tách từ code lặp lại ===
     /**
@@ -199,14 +200,64 @@ public class StatBotMain {
         }
     }
 
+    /**
+     * Sử dụng healing items một cách thông minh khi sắp chết hoặc máu thấp
+     */
+    private static boolean smartUseHealingItems(Hero hero, Inventory inv, Player me, List<Effect> currentEffects) {
+        // Ưu tiên giải hiệu ứng xấu nếu có
+        for (HealingItem item : inv.getListHealingItem()) {
+            if (EffectUtils.isControlled(currentEffects) && ("ELIXIR".equals(item.getId()) || "COMPASS".equals(item.getId()))) {
+                try {
+                    hero.useItem(item.getId());
+                    return true;
+                } catch (java.io.IOException e) {
+                    System.out.println("Lỗi khi gọi hero.useItem (giải hiệu ứng): " + e.getMessage());
+                }
+            }
+            if (EffectUtils.isTakingDamageOverTime(currentEffects) && "MAGIC".equals(item.getId())) {
+                try {
+                    hero.useItem(item.getId());
+                    return true;
+                } catch (java.io.IOException e) {
+                    System.out.println("Lỗi khi gọi hero.useItem (MAGIC): " + e.getMessage());
+                }
+            }
+        }
+        // Dùng item hồi máu mạnh nhất nếu máu thấp
+        int safeHealth = 35; // ngưỡng máu an toàn
+        while (me.getHealth() != null && me.getHealth() < safeHealth && !inv.getListHealingItem().isEmpty()) {
+            HealingItem bestHeal = StatBotUtils.getBestHealingItem(inv.getListHealingItem());
+            if (bestHeal != null) {
+                try {
+                    hero.useItem(bestHeal.getId());
+                } catch (java.io.IOException e) {
+                    System.out.println("Lỗi khi gọi hero.useItem (healing): " + e.getMessage());
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Kiểm tra item hồi máu giá trị cao
+     */
+    private static boolean isHighValueHealingItem(String itemId) {
+        return "ELIXIR".equals(itemId) || "ELIXIR_OF_LIFE".equals(itemId) || "MAGIC".equals(itemId) || "COMPASS".equals(itemId);
+    }
+
     public static void main(String[] args) {
         // Nhập trực tiếp các thông tin cần thiết
-        String secretKey = "sk-_UgcHnbHQACXmdeS-1263w:ZcELGs3FRAvZSBLpHoYD6KN6ylSqmx0yBZB-grJUsZYBQhUNmmtY3E62vFtWOEyRX3JCwXpRy6d4IzqcJ3LCFg"; // <-- Thay bằng secretKey thật
-        String gameID = "174091";      // <-- Thay bằng gameID thật
+        String secretKey = "sk-w9Qe9OM0SqqGeSAsMTQo8A:OmVVjykhBva_JnNP5RBuunV6pb6600lFuf2jsBZ6uOXjgXZWcH_QixoeaGgudUe0lSb7DZlsM8h-LOjGzoOytA"; // <-- Thay bằng secretKey thật
+        String gameID = "134713";      // <-- Thay bằng gameID thật
         String playerName = "YOUR_PLAYER_NAME_HERE"; // <-- Thay bằng tên người chơi
         String serverURL = "https://cf25-server.jsclub.dev";   // <-- Thay bằng URL server
 
         Hero hero = new Hero(gameID, playerName, secretKey);
+        // Lưu lại thời điểm bắt đầu trận đấu
+        startTime = System.currentTimeMillis();
         // Cài đặt logic bot tối ưu trong callback onMapUpdate
         hero.setOnMapUpdate(args1 -> {
             try {
@@ -240,11 +291,7 @@ public class StatBotMain {
                 }
                 // Emergency healing khi máu rất thấp
                 if (me.getHealth() < 25 && !inv.getListHealingItem().isEmpty()) {
-                    HealingItem bestHeal = StatBotUtils.getBestHealingItem(inv.getListHealingItem());
-                    if (bestHeal != null) {
-                        hero.useItem(bestHeal.getId());
-                        return;
-                    }
+                    if (smartUseHealingItems(hero, inv, me, currentEffects)) return;
                 }
                 // === CẬP NHẬT LỊCH SỬ VỊ TRÍ CỦA CÁC PLAYER ===
                 StatBotUtils.updatePlayerPositions(map, playerPositions);
@@ -481,10 +528,10 @@ public class StatBotMain {
                     // Kiểm tra xem item có nằm ngoài bo không
                     boolean itemInSafe = jsclub.codefest.sdk.algorithm.PathUtils.checkInsideSafeArea(bestItem, safeZone, mapSize);
                     
-                    // Nếu đang ở trong bo và item nằm ngoài bo, chỉ nhặt nếu là item cực kỳ quan trọng
+                    // Nếu đang ở trong bo và item nằm ngoài bo, chỉ nhặt nếu là item cực kỳ quan trọng hoặc item hồi máu giá trị cao
                     if (myPosInSafe && !itemInSafe) {
                         String itemId = StatBotUtils.getItemIdByPosition(map, bestItem);
-                        if (!"DRAGON_EGG".equals(itemId) && !"ELIXIR_OF_LIFE".equals(itemId)) {
+                        if (!"DRAGON_EGG".equals(itemId) && !"ELIXIR_OF_LIFE".equals(itemId) && !isHighValueHealingItem(itemId)) {
                             // Bỏ qua item ngoài bo, di chuyển thông minh thay vào đó
                             String smartDir = StatBotUtils.findSmartDirection(myPos, map, inv);
                             addMoveToHistory(smartDir);
@@ -579,8 +626,21 @@ public class StatBotMain {
                         }
                     }
                 }
+                // === DÙNG HẾT HEALING ITEMS KHI CÒN 5 GIÂY CUỐI TRẬN ===
+                long elapsed = System.currentTimeMillis() - startTime;
+                long matchDuration = 300_000; // 5 phút (ms)
+                if (matchDuration - elapsed <= 5000) {
+                    for (HealingItem item : new ArrayList<>(inv.getListHealingItem())) {
+                        try {
+                            hero.useItem(item.getId());
+                        } catch (java.io.IOException e) {
+                            System.out.println("Lỗi khi gọi hero.useItem (5s cuối): " + e.getMessage());
+                        }
+                    }
+                }
                 // Healing khi máu thấp và an toàn
                 if (me.getHealth() < 50) {
+                    if (smartUseHealingItems(hero, inv, me, currentEffects)) return;
                     List<Node> heals = new ArrayList<>(map.getListHealingItems());
                     Node nearestHeal = heals.stream().min((a, b) ->
                         Integer.compare(StatBotUtils.dist(a, myPos), StatBotUtils.dist(b, myPos))
