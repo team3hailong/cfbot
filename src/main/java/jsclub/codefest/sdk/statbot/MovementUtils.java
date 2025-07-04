@@ -29,8 +29,8 @@ public class MovementUtils {
     public static String directionTo(Node a, Node b) {
         if (a.x < b.x) return "r";
         if (a.x > b.x) return "l";
-        if (a.y < b.y) return "u";
-        if (a.y > b.y) return "d";
+        if (a.y < b.y) return "d";
+        if (a.y > b.y) return "u";
         return "";
     }
 

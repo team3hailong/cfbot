@@ -79,6 +79,25 @@ public class StatBotUtils {
                     return;
                 }
             }
+            // Ưu tiên xử lý healing item: nếu là healing item và máu chưa đầy thì dùng luôn trước khi nhặt
+            if (map.getListHealingItems().stream().anyMatch(h -> h.x == itemPos.x && h.y == itemPos.y)) {
+                var me = map.getCurrentPlayer();
+                if (me != null && me.getHealth() != null && me.getHealth() < 100) {
+                    // Tìm healing item tốt nhất trong túi (nếu có) và dùng trước khi nhặt
+                    var bestHeal = getBestHealingItem(inv.getListHealingItem());
+                    if (bestHeal != null) {
+                        hero.useItem(bestHeal.getId());
+                    }
+                } else if (inv.getListHealingItem().size() >= 4) {
+                    // Nếu máu đầy nhưng túi đầy, dùng healing item kém nhất để lấy chỗ
+                    HealingItem worstHeal = inv.getListHealingItem().stream()
+                        .min((a, b) -> Integer.compare(getBasePickupPointsSimple(a.getId()), getBasePickupPointsSimple(b.getId())))
+                        .orElse(null);
+                    if (worstHeal != null) {
+                        hero.useItem(worstHeal.getId());
+                    }
+                }
+            }
             if (map.getAllGun().stream().anyMatch(g -> g.x == itemPos.x && g.y == itemPos.y) && inv.getGun() != null) {
                 hero.revokeItem(inv.getGun().getId());
             } else if (map.getAllMelee().stream().anyMatch(m -> m.x == itemPos.x && m.y == itemPos.y) && inv.getMelee() != null && 
@@ -110,13 +129,6 @@ public class StatBotUtils {
                     if (isBetterHelmet(inv, itemId)) {
                         hero.revokeItem(inv.getHelmet().getId());
                     }
-                }
-            } else if (map.getListHealingItems().stream().anyMatch(h -> h.x == itemPos.x && h.y == itemPos.y) && inv.getListHealingItem().size() >= 4) {
-                HealingItem worstHeal = inv.getListHealingItem().stream()
-                    .min((a, b) -> Integer.compare(getBasePickupPointsSimple(a.getId()), getBasePickupPointsSimple(b.getId())))
-                    .orElse(null);
-                if (worstHeal != null) {
-                    hero.useItem(worstHeal.getId());
                 }
             }
         } catch (Exception e) {

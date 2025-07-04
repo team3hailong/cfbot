@@ -251,7 +251,7 @@ public class StatBotMain {
     public static void main(String[] args) {
         // Nhập trực tiếp các thông tin cần thiết
         String secretKey = "sk-w9Qe9OM0SqqGeSAsMTQo8A:OmVVjykhBva_JnNP5RBuunV6pb6600lFuf2jsBZ6uOXjgXZWcH_QixoeaGgudUe0lSb7DZlsM8h-LOjGzoOytA"; // <-- Thay bằng secretKey thật
-        String gameID = "134713";      // <-- Thay bằng gameID thật
+        String gameID = "166727";      // <-- Thay bằng gameID thật
         String playerName = "YOUR_PLAYER_NAME_HERE"; // <-- Thay bằng tên người chơi
         String serverURL = "https://cf25-server.jsclub.dev";   // <-- Thay bằng URL server
 
@@ -296,6 +296,11 @@ public class StatBotMain {
                 // === CẬP NHẬT LỊCH SỬ VỊ TRÍ CỦA CÁC PLAYER ===
                 StatBotUtils.updatePlayerPositions(map, playerPositions);
                 
+                // === KIỂM TRA VỊ TRÍ HIỆN TẠI SO VỚI BO ===
+                int safeZone = map.getSafeZone();
+                int mapSize = map.getMapSize();
+                boolean myPosInSafe = jsclub.codefest.sdk.algorithm.PathUtils.checkInsideSafeArea(myPos, safeZone, mapSize);
+                
                 // Combat và special weapon
                 List<Player> others = map.getOtherPlayerInfo();
                 if (EffectUtils.shouldAvoidCombat(currentEffects)) {
@@ -315,7 +320,10 @@ public class StatBotMain {
                     int myStrength = StatBotUtils.evaluateStrengthWithEffects(me, inv, currentEffects);
                     int oppStrength = StatBotUtils.evaluateStrength(vulnerablePlayer, null);
                     
-                    System.out.println("TẤN CÔNG BOT ĐỨNG IM: " + vulnerablePlayer.getId() + " (HP: " + vulnerablePlayer.getHealth() + ", distance: " + distance + ")");
+                    // Kiểm tra xem bot có ở ngoài bo không
+                    boolean oppInSafeZone = jsclub.codefest.sdk.algorithm.PathUtils.checkInsideSafeArea(opp, safeZone, mapSize);
+                    
+                    System.out.println("TẤN CÔNG BOT ĐỨNG IM: " + vulnerablePlayer.getId() + " (HP: " + vulnerablePlayer.getHealth() + ", distance: " + distance + ", inSafeZone: " + oppInSafeZone + ", myPos: " + myPos + ", oppPos: " + opp + ")");
                     
                     if (distance == 1) {
                         if (!EffectUtils.canAttackSafely(currentEffects)) {
@@ -327,15 +335,30 @@ public class StatBotMain {
                         
                         // Tấn công bot đứng im ngay lập tức
                         String attackDirection = StatBotUtils.directionTo(myPos, opp);
+                        System.out.println("HƯỚNG TẤN CÔNG: " + attackDirection + " (từ " + myPos + " đến " + opp + ")");
                         if (inv.getSpecial() != null && StatBotUtils.shouldPrioritizeSpecialWeapon(map, inv, myPos, attackDirection)) {
                             hero.useSpecial(attackDirection);
                             return;
                         }
-                        if (inv.getMelee() != null && !"HAND".equals(inv.getMelee().getId())) {
+                        // Nếu bot ở ngoài bo, chỉ dùng HAND hoặc special weapon
+                        if (!oppInSafeZone) {
+                            if (inv.getMelee() != null && "HAND".equals(inv.getMelee().getId())) {
+                                hero.attack(attackDirection);
+                                return;
+                            }
+                        } else {
+                            // Bot trong bo, có thể dùng tất cả vũ khí
+                            if (inv.getMelee() != null && !"HAND".equals(inv.getMelee().getId())) {
+                                hero.attack(attackDirection);
+                                return;
+                            } else if (inv.getGun() != null) {
+                                hero.shoot(attackDirection);
+                                return;
+                            }
+                        }
+                        // Fallback: nếu không có vũ khí nào, vẫn tấn công bằng HAND (mặc định)
+                        if (inv.getMelee() != null) {
                             hero.attack(attackDirection);
-                            return;
-                        } else if (inv.getGun() != null) {
-                            hero.shoot(attackDirection);
                             return;
                         }
                     } else if (distance <= 6) {
@@ -351,12 +374,15 @@ public class StatBotMain {
                             hero.useSpecial(attackDirection);
                             return;
                         }
-                        if (inv.getGun() != null) {
-                            hero.shoot(attackDirection);
-                            return;
-                        } else if (inv.getThrowable() != null) {
-                            hero.throwItem(attackDirection, distance);
-                            return;
+                        // Nếu bot ở ngoài bo, không dùng gun hoặc throwable
+                        if (oppInSafeZone) {
+                            if (inv.getGun() != null) {
+                                hero.shoot(attackDirection);
+                                return;
+                            } else if (inv.getThrowable() != null) {
+                                hero.throwItem(attackDirection, distance);
+                                return;
+                            }
                         }
                     }
                 }
@@ -375,6 +401,9 @@ public class StatBotMain {
                         int myStrength = StatBotUtils.evaluateStrengthWithEffects(me, inv, currentEffects);
                         int oppStrength = StatBotUtils.evaluateStrength(p, null);
                         
+                        // Kiểm tra xem player có ở ngoài bo không
+                        boolean oppInSafeZone = jsclub.codefest.sdk.algorithm.PathUtils.checkInsideSafeArea(opp, safeZone, mapSize);
+                        
                         if (distance == 1) {
                             if (!EffectUtils.canAttackSafely(currentEffects)) {
                                 String safeDir = StatBotUtils.safeDirection(myPos, opp, map);
@@ -388,12 +417,21 @@ public class StatBotMain {
                                     hero.useSpecial(attackDirection);
                                     return;
                                 }
-                                if (inv.getMelee() != null && !"HAND".equals(inv.getMelee().getId())) {
-                                    hero.attack(attackDirection);
-                                    return;
-                                } else if (inv.getGun() != null) {
-                                    hero.shoot(attackDirection);
-                                    return;
+                                // Nếu player ở ngoài bo, chỉ dùng HAND hoặc special weapon
+                                if (!oppInSafeZone) {
+                                    if (inv.getMelee() != null && "HAND".equals(inv.getMelee().getId())) {
+                                        hero.attack(attackDirection);
+                                        return;
+                                    }
+                                } else {
+                                    // Player trong bo, có thể dùng tất cả vũ khí
+                                    if (inv.getMelee() != null && !"HAND".equals(inv.getMelee().getId())) {
+                                        hero.attack(attackDirection);
+                                        return;
+                                    } else if (inv.getGun() != null) {
+                                        hero.shoot(attackDirection);
+                                        return;
+                                    }
                                 }
                             } else if (myStrength < oppStrength) {
                                 String safeDir = StatBotUtils.safeDirection(myPos, opp, map);
@@ -407,12 +445,21 @@ public class StatBotMain {
                                         hero.useSpecial(attackDirection);
                                         return;
                                     }
-                                    if (inv.getMelee() != null && !"HAND".equals(inv.getMelee().getId())) {
-                                        hero.attack(attackDirection);
-                                        return;
-                                    } else if (inv.getGun() != null) {
-                                        hero.shoot(attackDirection);
-                                        return;
+                                    // Nếu player ở ngoài bo, chỉ dùng HAND
+                                    if (!oppInSafeZone) {
+                                        if (inv.getMelee() != null && "HAND".equals(inv.getMelee().getId())) {
+                                            hero.attack(attackDirection);
+                                            return;
+                                        }
+                                    } else {
+                                        // Player trong bo, có thể dùng tất cả vũ khí
+                                        if (inv.getMelee() != null && !"HAND".equals(inv.getMelee().getId())) {
+                                            hero.attack(attackDirection);
+                                            return;
+                                        } else if (inv.getGun() != null) {
+                                            hero.shoot(attackDirection);
+                                            return;
+                                        }
                                     }
                                 } else {
                                     if (!inv.getListHealingItem().isEmpty()) {
@@ -440,12 +487,15 @@ public class StatBotMain {
                                 hero.useSpecial(attackDirection);
                                 return;
                             }
-                            if (inv.getGun() != null && (myStrength >= oppStrength || p.getHealth() < 20)) {
-                                hero.shoot(attackDirection);
-                                return;
-                            } else if (inv.getThrowable() != null && (myStrength >= oppStrength || p.getHealth() < 20)) {
-                                hero.throwItem(attackDirection, distance);
-                                return;
+                            // Nếu player ở ngoài bo, không dùng gun hoặc throwable
+                            if (oppInSafeZone && (myStrength >= oppStrength || p.getHealth() < 20)) {
+                                if (inv.getGun() != null) {
+                                    hero.shoot(attackDirection);
+                                    return;
+                                } else if (inv.getThrowable() != null) {
+                                    hero.throwItem(attackDirection, distance);
+                                    return;
+                                }
                             }
                         }
                     }
@@ -456,11 +506,6 @@ public class StatBotMain {
                     failedPickupItems.clear();
                     lastInventoryHash = currentInventoryHash;
                 }
-                
-                // === KIỂM TRA VỊ TRÍ HIỆN TẠI SO VỚI BO ===
-                int safeZone = map.getSafeZone();
-                int mapSize = map.getMapSize();
-                boolean myPosInSafe = jsclub.codefest.sdk.algorithm.PathUtils.checkInsideSafeArea(myPos, safeZone, mapSize);
                 
                 // Cập nhật thời gian ở ngoài bo
                 long currentTime = System.currentTimeMillis();
@@ -544,58 +589,81 @@ public class StatBotMain {
                     targetItemId = StatBotUtils.getItemIdByPosition(map, bestItem);
                     boolean isChest = map.getListChests().stream().anyMatch(chest -> chest.x == bestItem.x && chest.y == bestItem.y);
                     if (isChest) {
+                        // Kiểm tra xem rương có ở ngoài bo không
+                        boolean chestInSafeZone = jsclub.codefest.sdk.algorithm.PathUtils.checkInsideSafeArea(bestItem, safeZone, mapSize);
+                        
                         if (me.getHealth() != null && me.getHealth() < 20) {
                             String escapeDir = StatBotUtils.findSmartDirection(myPos, map, inv);
                             hero.move(escapeDir);
                             return;
                         }
-                        if (inv.getGun() != null) {
-                            String gunDir = StatBotUtils.getGunDirectionToChest(myPos, bestItem, inv.getGun());
-                            if (gunDir != null) {
-                                hero.shoot(gunDir);
-                                return;
-                            }
-                        }
-                        if (inv.getMelee() != null && !"HAND".equals(inv.getMelee().getId())) {
-                            String meleeDir = StatBotUtils.getMeleeDirectionToChest(myPos, bestItem, inv.getMelee());
-                            if (meleeDir != null) {
-                                hero.attack(meleeDir);
-                                return;
-                            }
-                        }
-                        if (StatBotUtils.dist(myPos, bestItem) == 1) {
-                            String dir = StatBotUtils.directionTo(myPos, bestItem);
-                            if (inv.getGun() != null) {
-                                hero.shoot(dir);
-                            } else if (inv.getMelee() != null) {
-                                hero.attack(dir);
-                            }
-                            return;
-                        } else {
-                            String path = findSafePath(map, me, bestItem);
-                            if (path != null) {
-                                if (path.isEmpty()) {
-                                    StatBotUtils.manageInventoryBeforePickup(map, inv, bestItem, hero);
-                                    hero.pickupItem();
-                                    // Ghi nhận item đã nhặt
-                                    lastPickedItemPos = new Node(bestItem.x, bestItem.y);
-                                    lastPickupTime = currentTime;
-                                    if ((map.getListHealingItems().contains(bestItem) && inv.getListHealingItem().size() >= 4)
-                                        || (map.getAllGun().contains(bestItem) && inv.getGun() != null)
-                                        || (map.getAllMelee().contains(bestItem) && inv.getMelee() != null && !inv.getMelee().getId().equals("HAND"))
-                                        || (map.getListArmors().contains(bestItem) && (inv.getArmor() != null || inv.getHelmet() != null))) {
-                                        String escapeDir = StatBotUtils.findSmartDirection(myPos, map, inv);
-                                        addMoveToHistory(escapeDir);
-                                        hero.move(escapeDir);
-                                        failedPickupItems.add(bestItem);
-                                    }
+                        
+                        // Nếu rương ở ngoài bo, chỉ dùng HAND để phá
+                        if (!chestInSafeZone) {
+                            if (StatBotUtils.dist(myPos, bestItem) == 1) {
+                                String dir = StatBotUtils.directionTo(myPos, bestItem);
+                                if (inv.getMelee() != null && "HAND".equals(inv.getMelee().getId())) {
+                                    hero.attack(dir);
                                     return;
                                 }
-                                if (path.length() == 1) {
-                                    StatBotUtils.manageInventoryBeforePickup(map, inv, bestItem, hero);
+                            } else {
+                                // Di chuyển đến gần rương để dùng HAND
+                                String path = findSafePath(map, me, bestItem);
+                                if (path != null && !path.isEmpty()) {
+                                    hero.move(String.valueOf(path.charAt(0)));
+                                    return;
                                 }
-                                hero.move(String.valueOf(path.charAt(0)));
+                            }
+                        } else {
+                            // Rương trong bo, có thể dùng tất cả vũ khí
+                            if (inv.getGun() != null) {
+                                String gunDir = StatBotUtils.getGunDirectionToChest(myPos, bestItem, inv.getGun());
+                                if (gunDir != null) {
+                                    hero.shoot(gunDir);
+                                    return;
+                                }
+                            }
+                            if (inv.getMelee() != null && !"HAND".equals(inv.getMelee().getId())) {
+                                String meleeDir = StatBotUtils.getMeleeDirectionToChest(myPos, bestItem, inv.getMelee());
+                                if (meleeDir != null) {
+                                    hero.attack(meleeDir);
+                                    return;
+                                }
+                            }
+                            if (StatBotUtils.dist(myPos, bestItem) == 1) {
+                                String dir = StatBotUtils.directionTo(myPos, bestItem);
+                                if (inv.getGun() != null) {
+                                    hero.shoot(dir);
+                                } else if (inv.getMelee() != null) {
+                                    hero.attack(dir);
+                                }
                                 return;
+                            } else {
+                                String path = findSafePath(map, me, bestItem);
+                                if (path != null) {
+                                    if (path.isEmpty()) {
+                                        StatBotUtils.manageInventoryBeforePickup(map, inv, bestItem, hero);
+                                        hero.pickupItem();
+                                        // Ghi nhận item đã nhặt
+                                        lastPickedItemPos = new Node(bestItem.x, bestItem.y);
+                                        lastPickupTime = currentTime;
+                                        if ((map.getListHealingItems().contains(bestItem) && inv.getListHealingItem().size() >= 4)
+                                            || (map.getAllGun().contains(bestItem) && inv.getGun() != null)
+                                            || (map.getAllMelee().contains(bestItem) && inv.getMelee() != null && !inv.getMelee().getId().equals("HAND"))
+                                            || (map.getListArmors().contains(bestItem) && (inv.getArmor() != null || inv.getHelmet() != null))) {
+                                            String escapeDir = StatBotUtils.findSmartDirection(myPos, map, inv);
+                                            addMoveToHistory(escapeDir);
+                                            hero.move(escapeDir);
+                                            failedPickupItems.add(bestItem);
+                                        }
+                                        return;
+                                    }
+                                    if (path.length() == 1) {
+                                        StatBotUtils.manageInventoryBeforePickup(map, inv, bestItem, hero);
+                                    }
+                                    hero.move(String.valueOf(path.charAt(0)));
+                                    return;
+                                }
                             }
                         }
                     } else {
